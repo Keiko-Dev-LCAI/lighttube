@@ -250,6 +250,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <button class="cat-btn" onclick="selectCategory('Sports',this)">⚽ Sports</button>
   <button class="cat-btn" onclick="selectCategory('News',this)">📰 News</button>
   <button class="cat-btn" onclick="selectCategory('Art',this)">🎨 Art</button>
+  <button class="cat-btn" onclick="selectCategory('Fun Stuff',this)">🎉 Fun Stuff</button>
   <button class="cat-btn" onclick="selectCategory('Other',this)">📎 Other</button>
 </div>
 
@@ -348,6 +349,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
         <option value="Sports">⚽ Sports</option>
         <option value="News">📰 News</option>
         <option value="Art">🎨 Art</option>
+        <option value="Fun Stuff">🎉 Fun Stuff</option>
         <option value="Other">📎 Other</option>
       </select>
     </div>
@@ -1006,7 +1008,7 @@ function formatTimeAgo(ts) {
 }
 
 function getCatEmoji(cat) {
-  const map = {Music:'🎵',Family:'👨‍👩‍👧',Education:'🎓',Comedy:'😂',Gaming:'🎮',Vlogging:'📹',Sports:'⚽',News:'📰',Art:'🎨',Other:'📎'};
+  const map = {Music:'🎵',Family:'👨‍👩‍👧',Education:'🎓',Comedy:'😂',Gaming:'🎮',Vlogging:'📹',Sports:'⚽',News:'📰',Art:'🎨','Fun Stuff':'🎉',Other:'📎'};
   return map[cat] || '📎';
 }
 
