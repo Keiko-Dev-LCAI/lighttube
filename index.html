@@ -884,7 +884,9 @@ async function doUpload() {
         try {
           const res  = await fetch(`${RELAY_SERVER}/api/lighttube/upload-progress/${jobId}`);
           const job  = await res.json();
-          const pct  = job.total > 0 ? Math.round((job.progress / job.total) * 100) : 0;
+          let pct = 0;
+          if (job.status === 'initializing') pct = 3;
+          else if (job.total > 0) pct = Math.min(99, Math.round((job.progress / job.total) * 100));
           document.getElementById('cp-bar').style.width = pct + '%';
           document.getElementById('cp-pct').textContent = pct + '%';
 
