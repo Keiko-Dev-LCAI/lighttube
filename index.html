@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OrcaTube — Blockchain Video Platform</title>
+<title>LightTube — Blockchain Video Platform</title>
 <meta name="description" content="Public video platform on Lightchain AI. No algorithm. No ads. No takedowns. Ever.">
 <style>
 :root {
@@ -175,7 +175,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <nav id="app-nav">
   <a class="nav-logo" href="#" onclick="showFeed();return false">
     <span class="nav-logo-icon">🎬</span>
-    <span class="nav-logo-text">OrcaTube</span>
+    <span class="nav-logo-text">LightTube</span>
   </a>
   <div class="nav-search">
     <span class="nav-search-icon">🔍</span>
@@ -356,7 +356,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 // ════════════════════════════════════════════════════════
 //  CONFIG
 // ════════════════════════════════════════════════════════
-const CONTRACT_ADDRESS  = 'DEPLOY_ADDRESS_HERE'; // replace after deploying OrcaTube.sol
+const CONTRACT_ADDRESS  = 'DEPLOY_ADDRESS_HERE'; // replace after deploying LightTube.sol
 const CHAIN_ID          = 9200n;
 const RPC_URL           = 'https://rpc.mainnet.lightchain.ai';
 const LIGHTSCAN_TX      = 'https://lightscan.io/tx/';
@@ -853,7 +853,7 @@ function copyVideoLink(videoId, btn) {
 function openOrcaMint(videoId) {
   const v = allVideos.find(x => x.videoId === videoId);
   if (!v) return;
-  const url = `${ORCAMINT_URL}?title=${encodeURIComponent(v.title)}&description=${encodeURIComponent(v.description || '')}&source=orcatube`;
+  const url = `${ORCAMINT_URL}?title=${encodeURIComponent(v.title)}&description=${encodeURIComponent(v.description || '')}&source=lighttube`;
   window.open(url, '_blank');
 }
 
