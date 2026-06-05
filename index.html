@@ -884,7 +884,7 @@ async function doChunkedUpload(title, desc, category, chunks) {
       const pct = Math.round(((i + 1) / chunks.length) * 100);
       document.getElementById('cp-bar').style.width = pct + '%';
       document.getElementById('cp-pct').textContent = pct + '%';
-      const tx = await writeContract.addVideoChunk(videoId, i, chunks[i]);
+      const tx = await writeContract.addVideoChunk(videoId, i, chunks[i], { gasLimit: 40000000n });
       await tx.wait();
     }
 
@@ -893,7 +893,8 @@ async function doChunkedUpload(title, desc, category, chunks) {
     await loadAllVideos();
   } catch (err) {
     overlay.style.display = 'none';
-    showToast('Upload failed: ' + (err.reason || err.message || err), true);
+    const msg = err.reason || err.message || err.code || (err.info && err.info.error && err.info.error.message) || JSON.stringify(err) || 'Unknown error';
+    showToast('Upload failed: ' + msg, true);
   }
 }
 
