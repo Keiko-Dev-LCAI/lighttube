@@ -470,6 +470,7 @@ async function loadAllVideos() {
       txHash:      e.transactionHash,
       isChunked:   true,
       totalChunks: Number(e.args[5]),
+      blockNumber: e.blockNumber,
     }));
 
     allVideos = [...small, ...chunked].sort((a, b) => b.timestamp - a.timestamp);
@@ -603,7 +604,10 @@ async function playVideo(videoId) {
       document.getElementById('player-placeholder').textContent = '⏳';
       try {
         const chunkFilter = readContract.filters.VideoChunkStored(videoId);
-        const chunkEvents = await readContract.queryFilter(chunkFilter, 0, 'latest');
+        // Search near the upload block instead of all blocks — much faster
+        const fromBlock = v.blockNumber ? Math.max(0, v.blockNumber) : 0;
+        const toBlock   = v.blockNumber ? v.blockNumber + 500 : 'latest';
+        const chunkEvents = await readContract.queryFilter(chunkFilter, fromBlock, toBlock);
         chunkEvents.sort((a, b) => Number(a.args[1]) - Number(b.args[1]));
         dataURI = chunkEvents.map(e => e.args[3]).join('');
         chunkCache.set(videoId, dataURI);
