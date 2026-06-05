@@ -755,7 +755,7 @@ function disconnectWallet() {
   provider = null; signer = null; wallet = null; writeContract = null;
   isAdmin = false;
   updateWalletUI(false);
-  renderVideoGrid(); // re-render to hide admin buttons
+  showFeed(); // always return to main feed on disconnect
   showToast('Disconnected');
 }
 
