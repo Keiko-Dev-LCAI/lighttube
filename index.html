@@ -390,7 +390,7 @@ const LIGHTSCAN_TX      = 'https://lightscan.io/tx/';
 const LIGHTSCAN_ADDR    = 'https://lightscan.io/address/';
 const ORCAMINT_URL      = 'https://orcamint.xyz';
 const ORCALEARN_URL     = 'https://orcalearn.ai';
-const CHUNK_SIZE        = 2 * 1024 * 1024; // 2MB — ~32M gas, safe within Lightchain 60M block limit
+const CHUNK_SIZE        = 1 * 1024 * 1024; // 1MB — ~24M gas, safe within Lightchain 50M block limit
 
 // ── Admin / Moderation ──────────────────────────────────────────────────────
 const RELAY_SERVER   = 'https://orcavault-production.up.railway.app';
@@ -884,7 +884,7 @@ async function doChunkedUpload(title, desc, category, chunks) {
       const pct = Math.round(((i + 1) / chunks.length) * 100);
       document.getElementById('cp-bar').style.width = pct + '%';
       document.getElementById('cp-pct').textContent = pct + '%';
-      const tx = await writeContract.addVideoChunk(videoId, i, chunks[i], { gasLimit: 40000000n });
+      const tx = await writeContract.addVideoChunk(videoId, i, chunks[i], { gasLimit: 30000000n });
       await tx.wait();
     }
 
