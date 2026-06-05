@@ -392,6 +392,13 @@ const ORCAMINT_URL      = 'https://orcamint.xyz';
 const ORCALEARN_URL     = 'https://orcalearn.ai';
 const CHUNK_SIZE        = 2 * 1024 * 1024; // 2MB — ~32M gas, safe within Lightchain 60M block limit
 
+// ── Admin / Moderation ──────────────────────────────────────────────────────
+const RELAY_SERVER   = 'https://orcavault-production.up.railway.app';
+const ADMIN_WALLETS  = [
+  '0xa3a653a8cba0710ff57ac34e2278c603b4259fd3', // Trust Wallet Account 1
+  '0x2b6b64cc13dd6d5acabcf3a5dd72b6ee8004de35', // Lightchain Node wallet
+];
+
 const CONTRACT_ABI = [
   "event VideoUploaded(uint256 indexed videoId, address indexed uploader, string title, string description, string category, string dataURI, uint256 timestamp)",
   "event VideoCreated(uint256 indexed videoId, address indexed uploader, string title, string description, string category, uint256 totalChunks, uint256 timestamp)",
@@ -417,12 +424,16 @@ let currentCategory = 'all';
 let selectedFile  = null;
 let selectedDataURI = null;
 let chunkCache    = new Map(); // videoId → assembled dataURI
+let hiddenVideos  = new Set(); // videoIds hidden by admin (server-side)
+let isAdmin       = false;     // true when an admin wallet is connected
+let _adminKey     = null;      // cached admin key for this session
 
 // ════════════════════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════════════════════
 window.addEventListener('load', async () => {
   readProvider = new ethers.JsonRpcProvider(RPC_URL);
+  await loadHiddenVideos(); // fetch moderation list before rendering
   if (CONTRACT_ADDRESS !== 'DEPLOY_ADDRESS_HERE') {
     readContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, readProvider);
     await loadAllVideos();
@@ -517,13 +528,21 @@ function renderVideoGrid() {
       }
     }
 
+    const isHidden = hiddenVideos.has(String(v.videoId));
     const orcaMintBtn = `<button class="video-action-btn gold" onclick="event.stopPropagation();openOrcaMint(${v.videoId})" title="Mint as NFT on OrcaMint">🪙 Mint</button>`;
     const orcaLearnBtn = v.category === 'Education' ? `<button class="video-action-btn" onclick="event.stopPropagation();window.open('${ORCALEARN_URL}','_blank')" title="Related course on OrcaLearn">🎓 Course</button>` : '';
     const shareBtn = `<button class="video-action-btn" onclick="event.stopPropagation();copyVideoLink(${v.videoId},this)">📤 Share</button>`;
     const chainBtn = v.txHash ? `<a class="video-action-btn" href="${LIGHTSCAN_TX}${v.txHash}" target="_blank" onclick="event.stopPropagation()">🔗 Chain</a>` : '';
     const chunkedBadge = v.isChunked ? `<span class="chunked-badge">⛓ ${v.totalChunks} chunks</span>` : '';
+    const hiddenBadge  = (isAdmin && isHidden) ? `<span style="background:rgba(232,82,82,0.12);border:1px solid rgba(232,82,82,.3);color:var(--red);font-size:14px;padding:4px 10px;border-radius:8px;font-weight:700">🚫 Hidden</span>` : '';
+    const adminBtn     = isAdmin
+      ? (isHidden
+          ? `<button class="video-action-btn" style="color:var(--green);border-color:rgba(82,201,127,0.4)" onclick="event.stopPropagation();unhideVideo(${v.videoId})">✅ Unhide</button>`
+          : `<button class="video-action-btn" style="color:var(--red);border-color:rgba(232,82,82,0.4)" onclick="event.stopPropagation();hideVideo(${v.videoId})">🗑️ Remove</button>`)
+      : '';
+    const cardStyle = (isAdmin && isHidden) ? ' style="border-color:rgba(232,82,82,0.4);opacity:0.7"' : '';
 
-    return `<div class="video-card" onclick="playVideo(${v.videoId})">
+    return `<div class="video-card"${cardStyle} onclick="playVideo(${v.videoId})">
       <div class="video-thumb">${thumbHtml}</div>
       <div class="video-card-body">
         <span class="video-category">${catEmoji} ${escHtml(v.category || 'Other')}</span>
@@ -531,9 +550,9 @@ function renderVideoGrid() {
         <div class="video-meta">
           <span class="video-uploader" onclick="event.stopPropagation();showChannel('${v.uploader}')">${shortAddr}</span>
           <span>${timeAgo}</span>
-          ${chunkedBadge}
+          ${chunkedBadge}${hiddenBadge}
         </div>
-        <div class="video-actions">${orcaMintBtn}${orcaLearnBtn}${shareBtn}${chainBtn}</div>
+        <div class="video-actions">${orcaMintBtn}${orcaLearnBtn}${shareBtn}${chainBtn}${adminBtn}</div>
       </div>
     </div>`;
   }).join('');
@@ -558,6 +577,7 @@ function filterVideos() {
 function applyFilters() {
   const q = document.getElementById('search-input').value.toLowerCase().trim();
   filteredVideos = allVideos.filter(v => {
+    if (!isAdmin && hiddenVideos.has(String(v.videoId))) return false; // hidden from public
     const matchCat = currentCategory === 'all' || v.category === currentCategory;
     const matchQ   = !q || v.title.toLowerCase().includes(q) || (v.description||'').toLowerCase().includes(q) || v.uploader.toLowerCase().includes(q);
     return matchCat && matchQ;
@@ -707,7 +727,9 @@ async function connectWallet() {
     signer = await provider.getSigner();
     wallet = await signer.getAddress();
     writeContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+    isAdmin = ADMIN_WALLETS.includes(wallet.toLowerCase());
     updateWalletUI(true);
+    renderVideoGrid(); // re-render so admin buttons appear/disappear
     showToast('Wallet connected!');
   } catch (err) {
     showToast('Connection failed: ' + (err.message || err), true);
@@ -716,7 +738,9 @@ async function connectWallet() {
 
 function disconnectWallet() {
   provider = null; signer = null; wallet = null; writeContract = null;
+  isAdmin = false;
   updateWalletUI(false);
+  renderVideoGrid(); // re-render to hide admin buttons
   showToast('Disconnected');
 }
 
@@ -955,6 +979,83 @@ function showLoading(msg) {
 
 function hideLoading() {
   document.getElementById('loading-overlay').classList.remove('visible');
+}
+
+// ════════════════════════════════════════════════════════
+//  ADMIN MODERATION
+// ════════════════════════════════════════════════════════
+async function loadHiddenVideos() {
+  try {
+    const res = await fetch(`${RELAY_SERVER}/api/lighttube/hidden`);
+    if (res.ok) {
+      const data = await res.json();
+      hiddenVideos = new Set((data.hidden || []).map(String));
+    }
+  } catch(e) {
+    // silently fail — moderation list unavailable, all videos show
+  }
+}
+
+function getAdminKey() {
+  if (_adminKey) return _adminKey;
+  _adminKey = sessionStorage.getItem('lt_ak');
+  if (!_adminKey) {
+    _adminKey = prompt('Enter admin password:');
+    if (_adminKey) sessionStorage.setItem('lt_ak', _adminKey);
+  }
+  return _adminKey;
+}
+
+async function hideVideo(videoId) {
+  const v = allVideos.find(x => x.videoId === videoId);
+  if (!v) return;
+  if (!confirm(`Remove "${v.title}" from the public feed?\n\nIt stays on the blockchain but won\'t be visible in the app.`)) return;
+  const key = getAdminKey();
+  if (!key) return;
+  try {
+    const res = await fetch(`${RELAY_SERVER}/api/lighttube/hide`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({videoId: String(videoId), adminKey: key})
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      if (res.status === 401) { _adminKey = null; sessionStorage.removeItem('lt_ak'); }
+      showToast((data.error || 'Failed'), true);
+      return;
+    }
+    hiddenVideos.add(String(videoId));
+    applyFilters();
+    showToast('Video removed from feed');
+  } catch(e) {
+    showToast('Error: ' + e.message, true);
+  }
+}
+
+async function unhideVideo(videoId) {
+  const v = allVideos.find(x => x.videoId === videoId);
+  if (!v) return;
+  if (!confirm(`Restore "${v.title}" to the public feed?`)) return;
+  const key = getAdminKey();
+  if (!key) return;
+  try {
+    const res = await fetch(`${RELAY_SERVER}/api/lighttube/unhide`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({videoId: String(videoId), adminKey: key})
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      if (res.status === 401) { _adminKey = null; sessionStorage.removeItem('lt_ak'); }
+      showToast((data.error || 'Failed'), true);
+      return;
+    }
+    hiddenVideos.delete(String(videoId));
+    applyFilters();
+    showToast('Video restored to feed');
+  } catch(e) {
+    showToast('Error: ' + e.message, true);
+  }
 }
 </script>
 </body>
