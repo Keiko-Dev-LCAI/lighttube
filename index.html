@@ -606,7 +606,7 @@ async function playVideo(videoId) {
       document.getElementById('player-placeholder').textContent = '⏳';
       try {
         const fromBlock = v.blockNumber ? Math.max(0, v.blockNumber) : 0;
-        const toBlock   = v.blockNumber ? v.blockNumber + 500 : 'latest';
+        const toBlock   = 'latest';
         // Fetch every chunk in parallel — each is a separate small request
         const chunkPromises = Array.from({length: v.totalChunks}, (_, i) => {
           const f = readContract.filters.VideoChunkStored(videoId, i);
