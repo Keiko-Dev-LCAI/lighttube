@@ -21,7 +21,7 @@
   --blue:   #4b9ee8;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:20px;min-height:100vh;overflow-x:hidden}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:20px;min-height:100vh}
 
 /* ── NAV ── */
 #app-nav{background:rgba(13,11,24,0.97);border-bottom:1px solid var(--border);padding:0 28px;display:flex;align-items:center;gap:18px;height:80px;position:sticky;top:0;z-index:200;backdrop-filter:blur(12px)}
@@ -189,17 +189,17 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   .video-title{font-size:18px}
   .video-action-btn{padding:9px 14px;font-size:15px}
 
-  /* Upload modal — slides up from bottom */
-  #upload-modal{padding:0;align-items:flex-end}
-  #upload-inner{border-radius:16px 16px 0 0;max-height:92vh;overflow-y:auto;padding:20px 16px;margin:0;width:100%}
+  /* Upload modal */
+  #upload-modal{padding:8px}
+  #upload-inner{padding:20px 14px;border-radius:12px}
   .upload-title{font-size:20px}
   .form-input,.form-textarea,.form-select{font-size:16px;padding:13px 14px}
   .form-label{font-size:16px}
 
-  /* Player modal — slides up from bottom */
-  #player-modal{padding:0;align-items:flex-end}
-  #player-inner{border-radius:16px 16px 0 0;max-height:95vh;overflow-y:auto;margin:0;width:100%}
-  #player-body{padding:18px 16px}
+  /* Player modal */
+  #player-modal{padding:8px}
+  #player-inner{border-radius:12px}
+  #player-body{padding:18px 14px}
   #player-title{font-size:22px}
   #player-meta{font-size:16px;gap:10px}
   #player-description{font-size:17px}
