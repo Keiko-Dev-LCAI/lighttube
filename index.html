@@ -810,13 +810,12 @@ function processFile(file) {
   const reader = new FileReader();
   reader.onload = e => {
     selectedDataURI = e.target.result;
-    if (selectedDataURI.length > CHUNK_SIZE) {
-      const { chunks, totalTx, timeStr } = estimateUpload(selectedDataURI.length);
-      document.getElementById('chunk-hint-box').innerHTML =
-        `<div class="chunk-hint">⛓️ Will upload in <strong>${chunks} chunks</strong> (${totalTx} transactions) · Est. <strong>${timeStr}</strong> · Keep tab open and approve each transaction</div>`;
-    } else {
-      document.getElementById('chunk-hint-box').innerHTML = `<div class="chunk-hint">⚡ Small file — uploads in one transaction</div>`;
-    }
+    const mb = (file.size / 1024 / 1024).toFixed(1);
+    const chunks = Math.ceil(selectedDataURI.length / CHUNK_SIZE);
+    const estMins = Math.ceil((chunks * 5) / 60);
+    const timeStr = estMins <= 1 ? 'under a minute' : `~${estMins} minutes`;
+    document.getElementById('chunk-hint-box').innerHTML =
+      `<div class="chunk-hint">✅ Ready — sign once, relay uploads in the background. No gas fees, keep this tab open. (${mb} MB · est. ${timeStr})</div>`;
   };
   reader.readAsDataURL(file);
 }
@@ -832,84 +831,85 @@ function estimateUpload(byteSize) {
 }
 
 async function doUpload() {
-  if (!wallet || !writeContract) { showToast('Connect wallet first', true); return; }
-  if (!selectedDataURI) { showToast('Select a file first', true); return; }
+  if (!wallet || !provider) { showToast('Connect wallet first', true); return; }
+  if (!selectedFile)        { showToast('Select a file first', true); return; }
   const title    = document.getElementById('upload-title').value.trim();
   const desc     = document.getElementById('upload-desc').value.trim();
   const category = document.getElementById('upload-category').value;
   if (!title)    { showToast('Enter a title', true); return; }
   if (!category) { showToast('Select a category', true); return; }
 
-  // Save data URI to local var BEFORE closeUpload() clears it
-  const dataURI = selectedDataURI;
+  const file = selectedFile;
   closeUpload();
 
-  if (dataURI.length <= CHUNK_SIZE) {
-    // Single transaction
-    try {
-      showLoading('Uploading video…');
-      const tx = await writeContract.uploadVideo(title, desc, category, dataURI);
-      await tx.wait();
-      hideLoading();
-      showToast('Video uploaded to blockchain! 🎉');
-      await loadAllVideos();
-    } catch (err) {
-      hideLoading();
-      showToast('Upload failed: ' + (err.reason || err.message || err), true);
-    }
-  } else {
-    // Chunked upload
-    const chunks = [];
-    for (let i = 0; i < dataURI.length; i += CHUNK_SIZE) {
-      chunks.push(dataURI.slice(i, i + CHUNK_SIZE));
-    }
-    await doChunkedUpload(title, desc, category, chunks);
-  }
-}
-
-async function doChunkedUpload(title, desc, category, chunks) {
   const overlay = document.getElementById('chunk-progress-overlay');
   overlay.style.display = 'flex';
   document.getElementById('cp-filename').textContent = title;
-  document.getElementById('cp-status').textContent = 'Confirming initVideo…';
+  document.getElementById('cp-status').textContent = 'Sign once to authorize upload…';
   document.getElementById('cp-bar').style.width = '0%';
   document.getElementById('cp-pct').textContent = '0%';
 
   try {
-    // initVideo
-    const initTx = await writeContract.initVideo(title, desc, category, chunks.length);
-    const receipt = await initTx.wait();
+    // ── Step 1: one signature (no gas, proves it's really you) ────────
+    const timestamp = Date.now().toString();
+    const message   = `Upload to LightTube\nTitle: ${title}\nWallet: ${wallet.toLowerCase()}\nTimestamp: ${timestamp}`;
+    const signer    = await provider.getSigner();
+    const signature = await signer.signMessage(message);
 
-    // Parse videoId from VideoCreated event
-    let videoId = null;
-    const iface = new ethers.Interface(CONTRACT_ABI);
-    for (const log of receipt.logs) {
-      try {
-        const parsed = iface.parseLog(log);
-        if (parsed && parsed.name === 'VideoCreated') {
-          videoId = Number(parsed.args[0]);
-          break;
-        }
-      } catch {}
-    }
-    if (videoId === null) throw new Error('Could not get videoId');
+    document.getElementById('cp-status').textContent = 'Uploading to relay server…';
 
-    // Upload chunks
-    for (let i = 0; i < chunks.length; i++) {
-      document.getElementById('cp-status').textContent = `Uploading chunk ${i+1} of ${chunks.length}…`;
-      const pct = Math.round(((i + 1) / chunks.length) * 100);
-      document.getElementById('cp-bar').style.width = pct + '%';
-      document.getElementById('cp-pct').textContent = pct + '%';
-      const tx = await writeContract.addVideoChunk(videoId, i, chunks[i], { gasLimit: 30000000n });
-      await tx.wait();
+    // ── Step 2: send file + signature to relay server ─────────────────
+    const formData = new FormData();
+    formData.append('video',       file);
+    formData.append('wallet',      wallet.toLowerCase());
+    formData.append('signature',   signature);
+    formData.append('title',       title);
+    formData.append('description', desc);
+    formData.append('category',    category);
+    formData.append('timestamp',   timestamp);
+
+    const startRes = await fetch(`${RELAY_SERVER}/api/lighttube/upload`, {
+      method: 'POST',
+      body:   formData,
+    });
+    if (!startRes.ok) {
+      const err = await startRes.json().catch(() => ({}));
+      throw new Error(err.error || 'Relay server error');
     }
+    const { jobId } = await startRes.json();
+
+    // ── Step 3: poll for progress ─────────────────────────────────────
+    await new Promise((resolve, reject) => {
+      const poll = setInterval(async () => {
+        try {
+          const res  = await fetch(`${RELAY_SERVER}/api/lighttube/upload-progress/${jobId}`);
+          const job  = await res.json();
+          const pct  = job.total > 0 ? Math.round((job.progress / job.total) * 100) : 0;
+          document.getElementById('cp-bar').style.width = pct + '%';
+          document.getElementById('cp-pct').textContent = pct + '%';
+
+          if (job.status === 'initializing') {
+            document.getElementById('cp-status').textContent = 'Registering video on chain…';
+          } else if (job.status === 'uploading') {
+            document.getElementById('cp-status').textContent =
+              `Uploading chunk ${job.progress} of ${job.total}…`;
+          } else if (job.status === 'complete') {
+            clearInterval(poll);
+            resolve(job.videoId);
+          } else if (job.status === 'error') {
+            clearInterval(poll);
+            reject(new Error(job.error || 'Upload failed'));
+          }
+        } catch (e) { /* network hiccup — keep polling */ }
+      }, 3000);
+    });
 
     overlay.style.display = 'none';
-    showToast('Video uploaded to blockchain! 🎉');
+    showToast('Video uploaded to the blockchain! 🎉');
     await loadAllVideos();
   } catch (err) {
     overlay.style.display = 'none';
-    const msg = err.reason || err.message || err.code || (err.info && err.info.error && err.info.error.message) || JSON.stringify(err) || 'Unknown error';
+    const msg = err.reason || err.message || String(err) || 'Unknown error';
     showToast('Upload failed: ' + msg, true);
   }
 }
