@@ -230,6 +230,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <button class="btn btn-outline btn-sm" id="btn-connect" onclick="connectWallet()">🔗 Connect</button>
     <button class="btn btn-gold btn-sm" id="btn-upload" onclick="openUpload()" style="display:none">+ Upload</button>
     <button class="btn btn-outline btn-sm" id="btn-channel" onclick="showMyChannel()" style="display:none">My Channel</button>
+    <button class="btn btn-sm" id="btn-hidden" onclick="showHiddenVideos()" style="display:none;background:rgba(232,82,82,0.15);border:1px solid rgba(232,82,82,0.4);color:var(--red)">🚫 Hidden</button>
     <button class="btn btn-outline btn-sm" id="btn-disconnect" onclick="disconnectWallet()" style="display:none;font-size:12px">Disconnect</button>
   </div>
 </nav>
@@ -681,6 +682,17 @@ function showMyChannel() {
   showChannel(wallet);
 }
 
+function showHiddenVideos() {
+  if (!isAdmin) return;
+  currentCategory = 'all';
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('search-input').value = '';
+  filteredVideos = allVideos.filter(v => hiddenVideos.has(String(v.videoId)));
+  const count = filteredVideos.length;
+  document.getElementById('feed-title').textContent = `🚫 Hidden Videos (${count})`;
+  renderVideoGrid();
+}
+
 function showChannel(addr) {
   currentCategory = 'all';
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
@@ -751,6 +763,7 @@ function updateWalletUI(connected) {
   document.getElementById('btn-connect').style.display    = connected ? 'none' : '';
   document.getElementById('btn-upload').style.display     = connected ? '' : 'none';
   document.getElementById('btn-channel').style.display    = connected ? '' : 'none';
+  document.getElementById('btn-hidden').style.display     = (connected && isAdmin) ? '' : 'none';
   document.getElementById('btn-disconnect').style.display = connected ? '' : 'none';
   if (connected) {
     document.getElementById('btn-disconnect').textContent = wallet.slice(0,6) + '…' + wallet.slice(-4);
