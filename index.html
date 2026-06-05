@@ -600,22 +600,28 @@ async function playVideo(videoId) {
     if (chunkCache.has(videoId)) {
       dataURI = chunkCache.get(videoId);
     } else {
-      document.getElementById('player-loading').style.display = 'block';
+      const loadingEl = document.getElementById('player-loading');
+      loadingEl.style.display = 'block';
+      loadingEl.textContent = `⛓️ Fetching ${v.totalChunks} chunks from blockchain…`;
       document.getElementById('player-placeholder').textContent = '⏳';
       try {
-        const chunkFilter = readContract.filters.VideoChunkStored(videoId);
-        // Search near the upload block instead of all blocks — much faster
         const fromBlock = v.blockNumber ? Math.max(0, v.blockNumber) : 0;
         const toBlock   = v.blockNumber ? v.blockNumber + 500 : 'latest';
-        const chunkEvents = await readContract.queryFilter(chunkFilter, fromBlock, toBlock);
-        chunkEvents.sort((a, b) => Number(a.args[1]) - Number(b.args[1]));
-        dataURI = chunkEvents.map(e => e.args[3]).join('');
+        // Fetch every chunk in parallel — each is a separate small request
+        const chunkPromises = Array.from({length: v.totalChunks}, (_, i) => {
+          const f = readContract.filters.VideoChunkStored(videoId, i);
+          return readContract.queryFilter(f, fromBlock, toBlock);
+        });
+        const results = await Promise.all(chunkPromises);
+        const chunks = results.map(evts => (evts[0] && evts[0].args[3]) || '');
+        dataURI = chunks.join('');
+        if (!dataURI) throw new Error('No video data found — chunks may not be on chain yet');
         chunkCache.set(videoId, dataURI);
       } catch(err) {
-        document.getElementById('player-loading').textContent = '⚠️ Failed to load video chunks. Try again.';
+        loadingEl.textContent = '⚠️ ' + (err.message || 'Could not load video — try again');
         return;
       }
-      document.getElementById('player-loading').style.display = 'none';
+      loadingEl.style.display = 'none';
     }
   }
 
