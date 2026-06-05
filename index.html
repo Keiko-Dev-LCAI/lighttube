@@ -686,7 +686,10 @@ function showChannel(addr) {
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
   const q = document.getElementById('search-input');
   q.value = addr;
-  filteredVideos = allVideos.filter(v => v.uploader.toLowerCase() === addr.toLowerCase());
+  filteredVideos = allVideos.filter(v =>
+    v.uploader.toLowerCase() === addr.toLowerCase() &&
+    !hiddenVideos.has(String(v.videoId)) // never show hidden videos on channel pages
+  );
   const shortAddr = addr.slice(0,6) + '…' + addr.slice(-4);
   document.getElementById('feed-title').textContent = `📺 ${shortAddr}'s Channel`;
   renderVideoGrid();
