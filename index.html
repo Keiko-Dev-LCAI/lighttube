@@ -790,13 +790,15 @@ async function doUpload() {
   if (!title)    { showToast('Enter a title', true); return; }
   if (!category) { showToast('Select a category', true); return; }
 
+  // Save data URI to local var BEFORE closeUpload() clears it
+  const dataURI = selectedDataURI;
   closeUpload();
 
-  if (selectedDataURI.length <= CHUNK_SIZE) {
+  if (dataURI.length <= CHUNK_SIZE) {
     // Single transaction
     try {
       showLoading('Uploading video…');
-      const tx = await writeContract.uploadVideo(title, desc, category, selectedDataURI);
+      const tx = await writeContract.uploadVideo(title, desc, category, dataURI);
       await tx.wait();
       hideLoading();
       showToast('Video uploaded to blockchain! 🎉');
@@ -808,8 +810,8 @@ async function doUpload() {
   } else {
     // Chunked upload
     const chunks = [];
-    for (let i = 0; i < selectedDataURI.length; i += CHUNK_SIZE) {
-      chunks.push(selectedDataURI.slice(i, i + CHUNK_SIZE));
+    for (let i = 0; i < dataURI.length; i += CHUNK_SIZE) {
+      chunks.push(dataURI.slice(i, i + CHUNK_SIZE));
     }
     await doChunkedUpload(title, desc, category, chunks);
   }
