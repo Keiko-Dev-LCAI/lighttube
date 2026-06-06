@@ -647,7 +647,8 @@ function renderVideoGrid() {
     const setThumbBtn = isOwner
       ? `<button class="video-action-btn" onclick="event.stopPropagation();openSetThumbnail(${v.videoId},'${v.contractVersion || 'v2'}')" style="color:var(--purple);border-color:rgba(155,127,232,0.4)">🖼️ Thumbnail</button>` : '';
 
-    const isHidden = hiddenVideos.has(String(v.videoId));
+    const hiddenKey = (v.contractVersion || 'v2') + '-' + v.videoId;
+    const isHidden = hiddenVideos.has(hiddenKey);
     const orcaMintBtn = `<button class="video-action-btn gold" onclick="event.stopPropagation();openOrcaMint(${v.videoId})" title="Mint as NFT on OrcaMint">🪙 Mint</button>`;
     const orcaLearnBtn = v.category === 'Education' ? `<button class="video-action-btn" onclick="event.stopPropagation();window.open('${ORCALEARN_URL}','_blank')" title="Related course on OrcaLearn">🎓 Course</button>` : '';
     const shareBtn = `<button class="video-action-btn" onclick="event.stopPropagation();copyVideoLink(${v.videoId},this)">📤 Share</button>`;
@@ -656,8 +657,8 @@ function renderVideoGrid() {
     const hiddenBadge  = (isAdmin && isHidden) ? `<span style="background:rgba(232,82,82,0.12);border:1px solid rgba(232,82,82,.3);color:var(--red);font-size:14px;padding:4px 10px;border-radius:8px;font-weight:700">🚫 Hidden</span>` : '';
     const adminBtn     = isAdmin
       ? (isHidden
-          ? `<button class="video-action-btn" style="color:var(--green);border-color:rgba(82,201,127,0.4)" onclick="event.stopPropagation();unhideVideo(${v.videoId})">✅ Unhide</button>`
-          : `<button class="video-action-btn" style="color:var(--red);border-color:rgba(232,82,82,0.4)" onclick="event.stopPropagation();hideVideo(${v.videoId})">🗑️ Remove</button>`)
+          ? `<button class="video-action-btn" style="color:var(--green);border-color:rgba(82,201,127,0.4)" onclick="event.stopPropagation();unhideVideo(${v.videoId},'${v.contractVersion || 'v2'}')">✅ Unhide</button>`
+          : `<button class="video-action-btn" style="color:var(--red);border-color:rgba(232,82,82,0.4)" onclick="event.stopPropagation();hideVideo(${v.videoId},'${v.contractVersion || 'v2'}')">🗑️ Remove</button>`)
       : '';
     const cardStyle = (isAdmin && isHidden) ? ' style="border-color:rgba(232,82,82,0.4);opacity:0.7"' : '';
     const tags = parseTags(v.description);
@@ -699,7 +700,7 @@ function filterVideos() {
 function applyFilters() {
   const q = document.getElementById('search-input').value.toLowerCase().trim();
   filteredVideos = allVideos.filter(v => {
-    if (!isAdmin && hiddenVideos.has(String(v.videoId))) return false; // hidden from public
+    if (!isAdmin && hiddenVideos.has((v.contractVersion || 'v2') + '-' + v.videoId)) return false; // hidden from public
     const matchCat = currentCategory === 'all' || v.category === currentCategory;
     let matchQ = true;
     if (q) {
@@ -829,7 +830,7 @@ function showHiddenVideos() {
   currentCategory = 'all';
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('search-input').value = '';
-  filteredVideos = allVideos.filter(v => hiddenVideos.has(String(v.videoId)));
+  filteredVideos = allVideos.filter(v => hiddenVideos.has((v.contractVersion || 'v2') + '-' + v.videoId));
   const count = filteredVideos.length;
   document.getElementById('feed-title').textContent = `🚫 Hidden Videos (${count})`;
   renderVideoGrid();
@@ -842,7 +843,7 @@ function showChannel(addr) {
   q.value = addr;
   filteredVideos = allVideos.filter(v =>
     v.uploader.toLowerCase() === addr.toLowerCase() &&
-    !hiddenVideos.has(String(v.videoId)) // never show hidden videos on channel pages
+    !hiddenVideos.has((v.contractVersion || 'v2') + '-' + v.videoId) // never show hidden videos on channel pages
   );
   const shortAddr = addr.slice(0,6) + '…' + addr.slice(-4);
   document.getElementById('feed-title').textContent = `📺 ${shortAddr}'s Channel`;
@@ -1368,17 +1369,19 @@ function getAdminKey() {
   return _adminKey;
 }
 
-async function hideVideo(videoId) {
-  const v = allVideos.find(x => x.videoId === videoId);
+async function hideVideo(videoId, contractVersion) {
+  const cv = contractVersion || 'v2';
+  const v = allVideos.find(x => x.videoId === videoId && (x.contractVersion || 'v2') === cv);
   if (!v) return;
   if (!confirm(`Remove "${v.title}" from the public feed?\n\nIt stays on the blockchain but won\'t be visible in the app.`)) return;
   const key = getAdminKey();
   if (!key) return;
+  const hiddenKey = cv + '-' + videoId;
   try {
     const res = await fetch(`${RELAY_SERVER}/api/lighttube/hide`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({videoId: String(videoId), adminKey: key})
+      body: JSON.stringify({videoId: hiddenKey, adminKey: key})
     });
     const data = await res.json();
     if (!res.ok) {
@@ -1386,7 +1389,7 @@ async function hideVideo(videoId) {
       showToast((data.error || 'Failed'), true);
       return;
     }
-    hiddenVideos.add(String(videoId));
+    hiddenVideos.add(hiddenKey);
     applyFilters();
     showToast('Video removed from feed');
   } catch(e) {
@@ -1394,8 +1397,9 @@ async function hideVideo(videoId) {
   }
 }
 
-async function unhideVideo(videoId) {
-  const v = allVideos.find(x => x.videoId === videoId);
+async function unhideVideo(videoId, contractVersion) {
+  const cv = contractVersion || 'v2';
+  const v = allVideos.find(x => x.videoId === videoId && (x.contractVersion || 'v2') === cv);
   if (!v) return;
   if (!confirm(`Restore "${v.title}" to the public feed?`)) return;
   const key = getAdminKey();
@@ -1404,7 +1408,7 @@ async function unhideVideo(videoId) {
     const res = await fetch(`${RELAY_SERVER}/api/lighttube/unhide`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({videoId: String(videoId), adminKey: key})
+      body: JSON.stringify({videoId: cv + '-' + videoId, adminKey: key})
     });
     const data = await res.json();
     if (!res.ok) {
@@ -1412,7 +1416,7 @@ async function unhideVideo(videoId) {
       showToast((data.error || 'Failed'), true);
       return;
     }
-    hiddenVideos.delete(String(videoId));
+    hiddenVideos.delete(cv + '-' + videoId);
     applyFilters();
     showToast('Video restored to feed');
   } catch(e) {
