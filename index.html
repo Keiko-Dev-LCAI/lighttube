@@ -477,6 +477,7 @@ const CHUNK_SIZE        = 1 * 1024 * 1024; // 1MB — ~24M gas, safe within Ligh
 
 // ── Admin / Moderation ──────────────────────────────────────────────────────
 const RELAY_SERVER   = 'https://orcavault-production.up.railway.app';
+const GITHUB_THUMB   = 'https://raw.githubusercontent.com/Keiko-Dev-LCAI/lighttube/main/thumbs/';
 const ADMIN_WALLETS  = [
   '0xa3a653a8cba0710ff57ac34e2278c603b4259fd3', // Trust Wallet Account 1
   '0x2b6b64cc13dd6d5acabcf3a5dd72b6ee8004de35', // Lightchain Node wallet
@@ -627,7 +628,7 @@ function renderVideoGrid() {
 
     const hue1 = (v.videoId * 137) % 360;
     const hue2 = (v.videoId * 137 + 80) % 360;
-    const thumbSrc = `${RELAY_SERVER}/api/lighttube/thumb/${v.contractVersion || 'v2'}/${v.videoId}`;
+    const thumbSrc = `${GITHUB_THUMB}${v.contractVersion || 'v2'}_${v.videoId}.jpg`;
     let thumbHtml = `<div class="video-thumb-gradient" style="background:linear-gradient(135deg,hsl(${hue1},55%,22%),hsl(${hue2},65%,14%))"><div class="video-thumb-play">▶</div></div><img class="video-thumb-img" src="${thumbSrc}" alt="" onerror="this.remove()">`;
     if (!v.isChunked && v.dataURI) {
       if (v.dataURI.startsWith('data:image')) {
