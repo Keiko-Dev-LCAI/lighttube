@@ -654,7 +654,7 @@ function renderVideoGrid() {
     const hiddenKey = (v.contractVersion || 'v2') + '-' + v.videoId;
     const isHidden = hiddenVideos.has(hiddenKey);
     const orcaMintBtn = `<button class="video-action-btn gold" onclick="event.stopPropagation();openOrcaMint(${v.videoId})" title="Mint as NFT on OrcaMint">🪙 Mint</button>`;
-    const orcaLearnBtn = v.category === 'Education' ? `<button class="video-action-btn" onclick="event.stopPropagation();window.open('${ORCALEARN_URL}','_blank')" title="Related course on OrcaLearn">🎓 Course</button>` : '';
+    const orcaLearnBtn = '';
     const shareBtn = `<button class="video-action-btn" onclick="event.stopPropagation();copyVideoLink(${v.videoId},this)">📤 Share</button>`;
     const chainBtn = v.txHash ? `<a class="video-action-btn" href="${LIGHTSCAN_TX}${v.txHash}" target="_blank" onclick="event.stopPropagation()">🔗 Chain</a>` : '';
     const chunkedBadge = v.isChunked ? `<span class="chunked-badge">⛓ ${v.totalChunks} chunks</span>` : '';
@@ -751,7 +751,7 @@ async function playVideo(videoId) {
      <span>${formatTimeAgo(v.timestamp)}</span>`;
 
   const mintBtn = `<button class="btn btn-gold btn-sm" onclick="openOrcaMint(${v.videoId})">🪙 Mint as NFT</button>`;
-  const learnBtn = v.category === 'Education' ? `<button class="btn btn-outline btn-sm" onclick="window.open('${ORCALEARN_URL}','_blank')">🎓 Take Course on OrcaLearn</button>` : '';
+  const learnBtn = '';
   const shareBtn = `<button class="btn btn-outline btn-sm" id="player-share-btn" onclick="copyVideoLink(${v.videoId},this)">📤 Share Link</button>`;
   const chainBtn = v.txHash ? `<a class="btn btn-outline btn-sm" href="${LIGHTSCAN_TX}${v.txHash}" target="_blank">🔗 View on Chain</a>` : '';
   document.getElementById('player-actions').innerHTML = mintBtn + learnBtn + shareBtn + chainBtn;
