@@ -799,15 +799,38 @@ async function playVideo(videoId) {
           if (m) mimeType = m[1];
         }
 
-        // Convert each base64 chunk → Uint8Array (avoids building a 500MB+ string)
-        const byteArrays = rawChunks.map(chunk => {
-          const b64    = chunk.includes(',') ? chunk.split(',', 2)[1] : chunk;
-          if (!b64) return new Uint8Array(0);
-          const binary = atob(b64);
+        // Convert base64 chunks → Uint8Arrays, respecting 4-char base64 boundaries.
+        // The first chunk has a data URI prefix (22 chars) that makes its base64
+        // portion non-divisible by 4. Every subsequent chunk continues mid-group.
+        // We carry leftover chars across boundaries so atob() always sees complete
+        // 4-char groups — without this, every boundary produces ~3 corrupted bytes
+        // which breaks the MP4 header (duration, moov atom, etc.).
+        const byteArrays = [];
+        let carry = '';  // 0–3 leftover base64 chars from previous chunk
+        for (let ci = 0; ci < rawChunks.length; ci++) {
+          const chunk  = rawChunks[ci];
+          const b64raw = chunk.includes(',') ? chunk.split(',', 2)[1] : chunk;
+          if (!b64raw) continue;
+          const b64        = carry + b64raw;
+          const alignedLen = Math.floor(b64.length / 4) * 4;
+          carry            = b64.slice(alignedLen);   // save 0–3 chars for next chunk
+          const toDecode   = b64.slice(0, alignedLen);
+          if (!toDecode) continue;
+          const binary = atob(toDecode);
           const bytes  = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-          return bytes;
-        });
+          for (let j = 0; j < binary.length; j++) bytes[j] = binary.charCodeAt(j);
+          byteArrays.push(bytes);
+        }
+        // Flush any remaining carry chars with padding
+        if (carry) {
+          try {
+            const padded = carry + '='.repeat((4 - carry.length % 4) % 4);
+            const binary = atob(padded);
+            const bytes  = new Uint8Array(binary.length);
+            for (let j = 0; j < binary.length; j++) bytes[j] = binary.charCodeAt(j);
+            byteArrays.push(bytes);
+          } catch(e) { /* ignore trailing padding edge cases */ }
+        }
 
         // Merge all Uint8Arrays into one contiguous buffer
         const totalLen = byteArrays.reduce((s, a) => s + a.length, 0);
