@@ -786,11 +786,40 @@ async function playVideo(videoId) {
             return res;
           });
         });
-        const results = await Promise.all(chunkPromises);
-        const chunks = results.map(evts => (evts[0] && evts[0].args[3]) || '');
-        dataURI = chunks.join('');
-        if (!dataURI) throw new Error('No video data found — chunks may not be on chain yet');
-        chunkCache.set(videoId, dataURI);
+        const results   = await Promise.all(chunkPromises);
+        const rawChunks = results.map(evts => (evts[0] && evts[0].args[3]) || '');
+        if (!rawChunks.some(c => c)) throw new Error('No video data found — chunks may not be on chain yet');
+
+        // Detect MIME type from the first chunk's data URI header
+        plText.innerHTML = '<span class="pl-spin">⛓</span> Assembling video…';
+        let mimeType = 'video/mp4';
+        const firstNonEmpty = rawChunks.find(c => c.startsWith('data:'));
+        if (firstNonEmpty) {
+          const m = firstNonEmpty.match(/^data:([^;]+);base64,/);
+          if (m) mimeType = m[1];
+        }
+
+        // Convert each base64 chunk → Uint8Array (avoids building a 500MB+ string)
+        const byteArrays = rawChunks.map(chunk => {
+          const b64    = chunk.includes(',') ? chunk.split(',', 2)[1] : chunk;
+          if (!b64) return new Uint8Array(0);
+          const binary = atob(b64);
+          const bytes  = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          return bytes;
+        });
+
+        // Merge all Uint8Arrays into one contiguous buffer
+        const totalLen = byteArrays.reduce((s, a) => s + a.length, 0);
+        const merged   = new Uint8Array(totalLen);
+        let   pos      = 0;
+        for (const arr of byteArrays) { merged.set(arr, pos); pos += arr.length; }
+
+        // Create a Blob URL — no string length limit, plays as a stream
+        const blob    = new Blob([merged], { type: mimeType });
+        const blobUrl = URL.createObjectURL(blob);
+        chunkCache.set(videoId, blobUrl);
+        dataURI = blobUrl;
       } catch(err) {
         plText.textContent = '⚠️ ' + (err.message || 'Could not load video — try again');
         plBar.style.display = 'none';
@@ -823,10 +852,16 @@ async function playVideo(videoId) {
 function closePlayer() {
   document.getElementById('player-modal').classList.remove('open');
   const wrap = document.getElementById('player-video-wrap');
-  wrap.querySelectorAll('video').forEach(v => { v.pause(); v.src = ''; });
+  wrap.querySelectorAll('video').forEach(v => {
+    v.pause();
+    if (v.src && v.src.startsWith('blob:')) URL.revokeObjectURL(v.src);
+    v.src = '';
+  });
   wrap.querySelectorAll('video,img').forEach(e => e.remove());
   document.getElementById('player-placeholder').style.display = 'flex';
   document.getElementById('player-placeholder').textContent = '🎬';
+  // Clear blob URL cache so memory is freed — user can reload chunks on next open
+  chunkCache.clear();
 }
 
 // ════════════════════════════════════════════════════════
