@@ -859,9 +859,8 @@ function showFeed() {
   currentCategory = 'all';
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
   document.querySelector('.cat-btn').classList.add('active');
-  filteredVideos = allVideos;
   document.getElementById('feed-title').textContent = 'All Videos';
-  renderVideoGrid();
+  applyFilters();
 }
 
 // ════════════════════════════════════════════════════════
