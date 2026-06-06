@@ -163,6 +163,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 #loading-overlay.visible{display:flex}
 .spinner{width:52px;height:52px;border:5px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.pl-spin{display:inline-block;animation:spin 1.2s linear infinite}
 .loading-text{font-size:22px;font-weight:700;color:var(--text)}
 
 /* ── RESPONSIVE ── */
@@ -320,7 +321,11 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <div id="player-meta"></div>
       <div id="player-description"></div>
       <div id="player-actions"></div>
-      <div id="player-loading" style="color:var(--muted);font-size:15px;display:none">⛓️ Reassembling video from Lightchain…</div>
+      <div id="player-loading" style="display:none;padding:16px 0 8px">
+        <div id="pl-text" style="font-size:18px;font-weight:700;color:var(--purple);margin-bottom:12px;display:flex;align-items:center;gap:8px"><span class="pl-spin">⛓</span> Downloading from blockchain…</div>
+        <div style="width:100%;height:8px;background:var(--bg3);border-radius:6px;overflow:hidden;margin-bottom:8px"><div id="pl-bar" style="height:100%;background:linear-gradient(90deg,var(--purple),var(--gold));border-radius:6px;width:0%;transition:width .25s"></div></div>
+        <div id="pl-count" style="font-size:16px;color:var(--muted)">0 / 0 chunks</div>
+      </div>
     </div>
   </div>
 </div>
@@ -758,16 +763,28 @@ async function playVideo(videoId) {
     } else {
       const loadingEl = document.getElementById('player-loading');
       loadingEl.style.display = 'block';
-      loadingEl.textContent = `⛓️ Fetching ${v.totalChunks} chunks from blockchain…`;
-      document.getElementById('player-placeholder').textContent = '⏳';
+      const plBar   = document.getElementById('pl-bar');
+      const plCount = document.getElementById('pl-count');
+      const plText  = document.getElementById('pl-text');
+      plBar.style.width = '0%';
+      plCount.textContent = `0 / ${v.totalChunks} chunks`;
+      plText.innerHTML = '<span class="pl-spin">⛓</span> Downloading from blockchain…';
+      document.getElementById('player-placeholder').textContent = '⛓';
       try {
         const fromBlock  = v.blockNumber ? Math.max(0, v.blockNumber) : 0;
         const toBlock    = 'latest';
         const chunkCt    = (v.contractVersion === 'v3' && readContractV3) ? readContractV3 : readContract;
-        // Fetch every chunk in parallel — each is a separate small request
-        const chunkPromises = Array.from({length: v.totalChunks}, (_, i) => {
+        const total = v.totalChunks;
+        let completed = 0;
+        // Fetch every chunk in parallel, updating progress as each one arrives
+        const chunkPromises = Array.from({length: total}, (_, i) => {
           const f = chunkCt.filters.VideoChunkStored(videoId, i);
-          return chunkCt.queryFilter(f, fromBlock, toBlock);
+          return chunkCt.queryFilter(f, fromBlock, toBlock).then(res => {
+            completed++;
+            plBar.style.width   = `${Math.round(completed / total * 100)}%`;
+            plCount.textContent = `${completed} / ${total} chunks`;
+            return res;
+          });
         });
         const results = await Promise.all(chunkPromises);
         const chunks = results.map(evts => (evts[0] && evts[0].args[3]) || '');
@@ -775,7 +792,9 @@ async function playVideo(videoId) {
         if (!dataURI) throw new Error('No video data found — chunks may not be on chain yet');
         chunkCache.set(videoId, dataURI);
       } catch(err) {
-        loadingEl.textContent = '⚠️ ' + (err.message || 'Could not load video — try again');
+        plText.textContent = '⚠️ ' + (err.message || 'Could not load video — try again');
+        plBar.style.display = 'none';
+        plCount.style.display = 'none';
         return;
       }
       loadingEl.style.display = 'none';
