@@ -525,6 +525,14 @@ let chunkCache    = new Map(); // videoId → assembled dataURI
 let hiddenVideos     = new Set(); // videoIds hidden by admin (server-side)
 let permanentHidden  = new Set(); // subset that are permanently removed (cannot be restored)
 let ltOverrides   = {};        // relay metadata overrides {videoId: {title,description,category}}
+
+// Central hidden-video check. Handles both formats: "v3-5" and bare "5".
+function isVideoHidden(v) {
+  const vKey = (v.contractVersion || 'v2') + '-' + v.videoId;
+  const vId  = String(v.videoId);
+  return hiddenVideos.has(vKey)   || hiddenVideos.has(vId)   ||
+         permanentHidden.has(vKey)|| permanentHidden.has(vId);
+}
 let isAdmin       = false;     // true when an admin wallet is connected
 let _adminKey     = null;      // cached admin key for this session
 
@@ -726,9 +734,7 @@ function applyFilters() {
   const q = document.getElementById('search-input').value.toLowerCase().trim();
   filteredVideos = allVideos.filter(rawV => {
     const v = applyLtOverride(rawV);
-    const _vKey = (v.contractVersion || 'v2') + '-' + v.videoId;
-    const _vId  = String(v.videoId);
-    if (!isAdmin && (hiddenVideos.has(_vKey) || permanentHidden.has(_vKey) || permanentHidden.has(_vId))) return false; // hidden from public
+    if (!isAdmin && isVideoHidden(v)) return false; // hidden from public
     const matchCat = currentCategory === 'all' || (v.category||'Other').split(',').map(s=>s.trim()).includes(currentCategory);
     let matchQ = true;
     if (q) {
@@ -946,11 +952,7 @@ function showChannel(addr) {
   q.value = addr;
   filteredVideos = allVideos.filter(rawV => {
     const v = applyLtOverride(rawV);
-    const vKey = (v.contractVersion || 'v2') + '-' + v.videoId;
-    return v.uploader.toLowerCase() === addr.toLowerCase() &&
-           !hiddenVideos.has(vKey) &&
-           !permanentHidden.has(vKey) &&
-           !permanentHidden.has(String(v.videoId));
+    return v.uploader.toLowerCase() === addr.toLowerCase() && !isVideoHidden(v);
   });
   const shortAddr = addr.slice(0,6) + '…' + addr.slice(-4);
   document.getElementById('feed-title').textContent = `📺 ${shortAddr}'s Channel`;
