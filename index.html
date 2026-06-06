@@ -484,6 +484,7 @@ const CHUNK_SIZE        = 1 * 1024 * 1024; // 1MB — ~24M gas, safe within Ligh
 // ── Admin / Moderation ──────────────────────────────────────────────────────
 const RELAY_SERVER   = 'https://orcavault-production.up.railway.app';
 const GITHUB_THUMB   = 'https://raw.githubusercontent.com/Keiko-Dev-LCAI/lighttube/main/thumbs/';
+const GITHUB_MOD_RAW = 'https://raw.githubusercontent.com/Keiko-Dev-LCAI/lighttube/main/moderation/';
 const ADMIN_WALLETS  = [
   '0xa3a653a8cba0710ff57ac34e2278c603b4259fd3', // Trust Wallet Account 1
   '0x2b6b64cc13dd6d5acabcf3a5dd72b6ee8004de35', // Lightchain Node wallet
@@ -533,7 +534,9 @@ window.addEventListener('load', async () => {
   readProvider = new ethers.JsonRpcProvider(RPC_URL);
   await loadHiddenVideos();
   await loadLtOverrides();
-  // If admin key already in session, load permanent lists now (non-blocking)
+  // Load permanent hidden list from public GitHub URL — applies to ALL visitors, no key needed
+  await loadPublicHiddenList();
+  // If admin key already in session, also load full admin lists (includes banned wallets)
   if (sessionStorage.getItem('lt_ak')) loadPermanentLists();
   readContract = new ethers.Contract(CONTRACT_ADDRESS_V2, CONTRACT_ABI, readProvider);
   if (CONTRACT_ADDRESS_V3 !== 'DEPLOY_V3_ADDRESS_HERE') {
@@ -1518,6 +1521,18 @@ async function loadPermanentLists() {
       permanentHidden = new Set((data.permanent_hidden || []).map(String));
     }
   } catch(e) { /* silently fail */ }
+}
+
+async function loadPublicHiddenList() {
+  // Fetch permanent_hidden list from public GitHub URL — no admin key needed.
+  // Applies to ALL visitors so permanently-removed videos are hidden for everyone.
+  try {
+    const res = await fetch(GITHUB_MOD_RAW + 'permanent_hidden.json?t=' + Date.now());
+    if (res.ok) {
+      const data = await res.json();
+      permanentHidden = new Set((data || []).map(String));
+    }
+  } catch(e) { /* silently fail — hidden list is best-effort */ }
 }
 
 async function loadLtOverrides() {
