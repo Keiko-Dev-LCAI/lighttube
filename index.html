@@ -521,6 +521,7 @@ let selectedDuration  = null;
 let selectedThumbnail = null;
 let chunkCache    = new Map(); // videoId → assembled dataURI
 let hiddenVideos  = new Set(); // videoIds hidden by admin (server-side)
+let ltOverrides   = {};        // relay metadata overrides {videoId: {title,description,category}}
 let isAdmin       = false;     // true when an admin wallet is connected
 let _adminKey     = null;      // cached admin key for this session
 
@@ -530,6 +531,7 @@ let _adminKey     = null;      // cached admin key for this session
 window.addEventListener('load', async () => {
   readProvider = new ethers.JsonRpcProvider(RPC_URL);
   await loadHiddenVideos();
+  await loadLtOverrides();
   readContract = new ethers.Contract(CONTRACT_ADDRESS_V2, CONTRACT_ABI, readProvider);
   if (CONTRACT_ADDRESS_V3 !== 'DEPLOY_V3_ADDRESS_HERE') {
     readContractV3 = new ethers.Contract(CONTRACT_ADDRESS_V3, CONTRACT_ABI, readProvider);
@@ -627,7 +629,8 @@ function renderVideoGrid() {
   grid.style.display = 'grid';
   count.textContent = `${filteredVideos.length} video${filteredVideos.length !== 1 ? 's' : ''}`;
 
-  grid.innerHTML = filteredVideos.map(v => {
+  grid.innerHTML = filteredVideos.map(rawV => {
+    const v = applyLtOverride(rawV);
     const timeAgo = formatTimeAgo(v.timestamp);
     const shortAddr = v.uploader.slice(0,6) + '…' + v.uploader.slice(-4);
     const catEmoji = getCatEmoji(v.category);
@@ -706,7 +709,8 @@ function filterVideos() {
 
 function applyFilters() {
   const q = document.getElementById('search-input').value.toLowerCase().trim();
-  filteredVideos = allVideos.filter(v => {
+  filteredVideos = allVideos.filter(rawV => {
+    const v = applyLtOverride(rawV);
     if (!isAdmin && hiddenVideos.has((v.contractVersion || 'v2') + '-' + v.videoId)) return false; // hidden from public
     const matchCat = currentCategory === 'all' || (v.category||'Other').split(',').map(s=>s.trim()).includes(currentCategory);
     let matchQ = true;
@@ -739,8 +743,9 @@ function filterByTag(tag) {
 //  PLAY VIDEO
 // ════════════════════════════════════════════════════════
 async function playVideo(videoId) {
-  const v = allVideos.find(x => x.videoId === videoId);
-  if (!v) return;
+  const rawV = allVideos.find(x => x.videoId === videoId);
+  if (!rawV) return;
+  const v = applyLtOverride(rawV);
 
   document.getElementById('player-modal').classList.add('open');
   document.getElementById('player-title').textContent = v.title;
@@ -1489,6 +1494,26 @@ async function loadHiddenVideos() {
   } catch(e) {
     // silently fail — moderation list unavailable, all videos show
   }
+}
+
+async function loadLtOverrides() {
+  try {
+    const res = await fetch(`${RELAY_SERVER}/api/lighttube/overrides`);
+    if (res.ok) ltOverrides = await res.json();
+  } catch(e) { /* silently fail */ }
+}
+
+function applyLtOverride(v) {
+  // Apply relay metadata override (if any) over on-chain data for this video.
+  // Key format: "v2-<id>" or "v3-<id>"
+  const key = (v.contractVersion || 'v2') + '-' + v.videoId;
+  const ov = ltOverrides[key];
+  if (!ov) return v;
+  return Object.assign({}, v, {
+    title:       ov.title       !== undefined ? ov.title       : v.title,
+    description: ov.description !== undefined ? ov.description : v.description,
+    category:    ov.category    !== undefined ? ov.category    : v.category,
+  });
 }
 
 function getAdminKey() {
