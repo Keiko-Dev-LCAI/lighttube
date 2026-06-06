@@ -721,7 +721,9 @@ function applyFilters() {
   const q = document.getElementById('search-input').value.toLowerCase().trim();
   filteredVideos = allVideos.filter(rawV => {
     const v = applyLtOverride(rawV);
-    if (!isAdmin && hiddenVideos.has((v.contractVersion || 'v2') + '-' + v.videoId)) return false; // hidden from public
+    const _vKey = (v.contractVersion || 'v2') + '-' + v.videoId;
+    const _vId  = String(v.videoId);
+    if (!isAdmin && (hiddenVideos.has(_vKey) || permanentHidden.has(_vKey) || permanentHidden.has(_vId))) return false; // hidden from public
     const matchCat = currentCategory === 'all' || (v.category||'Other').split(',').map(s=>s.trim()).includes(currentCategory);
     let matchQ = true;
     if (q) {
