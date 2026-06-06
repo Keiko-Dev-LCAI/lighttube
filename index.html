@@ -271,6 +271,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <button class="cat-btn" onclick="selectCategory('Art',this)">🎨 Art</button>
   <button class="cat-btn" onclick="selectCategory('Family',this)">👨‍👩‍👧 Family</button>
   <button class="cat-btn" onclick="selectCategory('Tutorial',this)">🛠️ Tutorial</button>
+  <button class="cat-btn" onclick="selectCategory('Historical',this)">🏛️ Historical</button>
   <button class="cat-btn" onclick="selectCategory('Other',this)">📎 Other</button>
 </div>
 
@@ -1239,7 +1240,7 @@ const CATS = [
   {v:'Animation',e:'✏️'},{v:'Thriller',e:'🔪'},{v:'Music',e:'🎵'},
   {v:'Comedy',e:'😂'},{v:'Gaming',e:'🎮'},{v:'Vlogging',e:'📹'},
   {v:'Sports',e:'⚽'},{v:'News',e:'📰'},{v:'Education',e:'🎓'},
-  {v:'Art',e:'🎨'},{v:'Family',e:'👨‍👩‍👧'},{v:'Tutorial',e:'🛠️'},{v:'Other',e:'📎'}
+  {v:'Art',e:'🎨'},{v:'Family',e:'👨‍👩‍👧'},{v:'Tutorial',e:'🛠️'},{v:'Historical',e:'🏛️'},{v:'Other',e:'📎'}
 ];
 const CAT_MAP = Object.fromEntries(CATS.map(c=>[c.v,c.e]));
 
