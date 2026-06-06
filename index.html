@@ -852,16 +852,11 @@ async function playVideo(videoId) {
 function closePlayer() {
   document.getElementById('player-modal').classList.remove('open');
   const wrap = document.getElementById('player-video-wrap');
-  wrap.querySelectorAll('video').forEach(v => {
-    v.pause();
-    if (v.src && v.src.startsWith('blob:')) URL.revokeObjectURL(v.src);
-    v.src = '';
-  });
+  // Pause video but keep blob URL alive in chunkCache so replay is instant
+  wrap.querySelectorAll('video').forEach(v => { v.pause(); v.src = ''; });
   wrap.querySelectorAll('video,img').forEach(e => e.remove());
   document.getElementById('player-placeholder').style.display = 'flex';
   document.getElementById('player-placeholder').textContent = '🎬';
-  // Clear blob URL cache so memory is freed — user can reload chunks on next open
-  chunkCache.clear();
 }
 
 // ════════════════════════════════════════════════════════
