@@ -573,7 +573,7 @@ async function loadAllVideos() {
     allVideos = [...v2Videos, ...v3Videos].sort((a, b) => b.timestamp - a.timestamp);
 
     // Apply V3 metadata updates (latest event per videoId wins)
-    v3Updates.forEach(e => {
+    v3updates.forEach(e => {
       const vid = allVideos.find(v => v.videoId === Number(e.args[0]) && v.contractVersion === 'v3');
       if (vid) {
         vid.title       = e.args[2];
