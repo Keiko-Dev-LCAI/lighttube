@@ -338,6 +338,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
         <div class="drop-zone-sub" id="upload-sub">Any size supported · MP4, MOV, WEBM, GIF · chunks uploaded automatically</div>
       </div>
       <input type="file" id="file-input" accept="video/*,image/gif" style="display:none" onchange="handleFileSelect(this)">
+      <img id="upload-thumb-preview" style="display:none;margin-top:12px;width:100%;max-width:320px;border-radius:8px;border:1px solid var(--border)" alt="Auto-captured thumbnail">
       <div id="file-preview-info" style="display:none"></div>
       <div id="chunk-hint-box"></div>
     </div>
@@ -982,22 +983,32 @@ function processFile(file) {
   if (file.type.startsWith('video/')) {
     const tmpUrl = URL.createObjectURL(file);
     const tmpVid = document.createElement('video');
-    tmpVid.preload = 'metadata';
+    tmpVid.preload = 'auto';
+    tmpVid.muted = true;
     tmpVid.onloadedmetadata = function() {
       // Capture duration
       const secs = Math.round(tmpVid.duration);
       selectedDuration = Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
-      // Seek to 10% in for thumbnail frame
-      tmpVid.currentTime = Math.min(2, tmpVid.duration * 0.1);
+      // Seek to 1s — first meaningful frame, reliably buffered
+      tmpVid.currentTime = 1;
     };
     tmpVid.onseeked = function() {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = 320; canvas.height = 180;
-        canvas.getContext('2d').drawImage(tmpVid, 0, 0, 320, 180);
-        selectedThumbnail = canvas.toDataURL('image/jpeg', 0.75);
-      } catch(e) { /* cross-origin or codec issue — skip thumbnail */ }
-      URL.revokeObjectURL(tmpUrl);
+      // Wait one animation frame to ensure the video frame is actually rendered
+      requestAnimationFrame(function() {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 320; canvas.height = 180;
+          canvas.getContext('2d').drawImage(tmpVid, 0, 0, 320, 180);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+          if (dataUrl && dataUrl.length > 5000) { // non-black frame check
+            selectedThumbnail = dataUrl;
+            // Show preview so user can see it worked
+            const preview = document.getElementById('upload-thumb-preview');
+            if (preview) { preview.src = dataUrl; preview.style.display = 'block'; }
+          }
+        } catch(e) { /* codec not supported for canvas capture */ }
+        URL.revokeObjectURL(tmpUrl);
+      });
     };
     tmpVid.onerror = function() { URL.revokeObjectURL(tmpUrl); };
     tmpVid.src = tmpUrl;
