@@ -582,9 +582,8 @@ async function loadAllVideos() {
       }
     });
 
-    filteredVideos = allVideos;
     document.getElementById('feed-loading').style.display = 'none';
-    renderVideoGrid();
+    applyFilters();
   } catch (err) {
     console.error('Load error:', err);
     document.getElementById('feed-loading').textContent = '⚠️ Could not load videos — check your connection.';
