@@ -472,8 +472,8 @@ const CONTRACT_ADDRESS_V3 = '0x2077AbeBe64461f0265937328C9e710C35E18Fd3';   // L
 const CONTRACT_ADDRESS    = CONTRACT_ADDRESS_V2;                            // kept for compat
 const CHAIN_ID          = 9200n;
 const RPC_URL           = 'https://rpc.mainnet.lightchain.ai';
-const LIGHTSCAN_TX      = 'https://lightscan.io/tx/';
-const LIGHTSCAN_ADDR    = 'https://lightscan.io/address/';
+const LIGHTSCAN_TX      = 'https://mainnet.lightscan.app/tx/';
+const LIGHTSCAN_ADDR    = 'https://mainnet.lightscan.app/address/';
 const ORCAMINT_URL      = 'https://orcamint.xyz';
 const ORCALEARN_URL     = 'https://orcalearn.ai';
 const CHUNK_SIZE        = 1 * 1024 * 1024; // 1MB — ~24M gas, safe within Lightchain 50M block limit
@@ -881,7 +881,7 @@ async function connectWallet() {
           chainName: 'Lightchain AI',
           nativeCurrency: { name: 'LCAI', symbol: 'LCAI', decimals: 18 },
           rpcUrls: ['https://rpc.mainnet.lightchain.ai'],
-          blockExplorerUrls: ['https://lightscan.io'],
+          blockExplorerUrls: ['https://mainnet.lightscan.app'],
         }]);
       }
     }
