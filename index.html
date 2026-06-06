@@ -597,7 +597,11 @@ async function loadAllVideos() {
 
     const v2Videos = parseEvents(v2small, v2chunked, 'v2');
     const v3Videos = parseEvents(v3small, v3chunked, 'v3');
-    allVideos = [...v2Videos, ...v3Videos].sort((a, b) => b.timestamp - a.timestamp);
+    // Deduplicate by contractVersion+videoId (keep first occurrence = earliest in array)
+    const _seen = new Set();
+    allVideos = [...v2Videos, ...v3Videos]
+      .filter(v => { const k = (v.contractVersion||'v2')+'-'+v.videoId; if (_seen.has(k)) return false; _seen.add(k); return true; })
+      .sort((a, b) => b.timestamp - a.timestamp);
 
     // Apply V3 metadata updates (latest event per videoId wins)
     v3updates.forEach(e => {
@@ -1525,7 +1529,9 @@ async function loadPermanentLists() {
     const res = await fetch(`${RELAY_SERVER}/api/lighttube/moderation-lists?adminKey=${encodeURIComponent(key)}`);
     if (res.ok) {
       const data = await res.json();
-      permanentHidden = new Set((data.permanent_hidden || []).map(String));
+      // MERGE — never replace. GitHub entries loaded first must survive relay data gaps.
+      const relayHidden = new Set((data.permanent_hidden || []).map(String));
+      permanentHidden = new Set([...permanentHidden, ...relayHidden]);
     }
   } catch(e) { /* silently fail */ }
 }
