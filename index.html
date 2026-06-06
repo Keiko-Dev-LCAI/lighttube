@@ -940,10 +940,14 @@ function showChannel(addr) {
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
   const q = document.getElementById('search-input');
   q.value = addr;
-  filteredVideos = allVideos.filter(v =>
-    v.uploader.toLowerCase() === addr.toLowerCase() &&
-    !hiddenVideos.has((v.contractVersion || 'v2') + '-' + v.videoId) // never show hidden videos on channel pages
-  );
+  filteredVideos = allVideos.filter(rawV => {
+    const v = applyLtOverride(rawV);
+    const vKey = (v.contractVersion || 'v2') + '-' + v.videoId;
+    return v.uploader.toLowerCase() === addr.toLowerCase() &&
+           !hiddenVideos.has(vKey) &&
+           !permanentHidden.has(vKey) &&
+           !permanentHidden.has(String(v.videoId));
+  });
   const shortAddr = addr.slice(0,6) + '…' + addr.slice(-4);
   document.getElementById('feed-title').textContent = `📺 ${shortAddr}'s Channel`;
   renderVideoGrid();
