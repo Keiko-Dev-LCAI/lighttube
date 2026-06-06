@@ -919,7 +919,11 @@ function showHiddenVideos() {
   currentCategory = 'all';
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('search-input').value = '';
-  filteredVideos = allVideos.filter(v => hiddenVideos.has((v.contractVersion || 'v2') + '-' + v.videoId));
+  // Only show TEMPORARILY hidden videos — permanently removed ones are gone from view entirely
+  filteredVideos = allVideos.filter(v => {
+    const key = (v.contractVersion || 'v2') + '-' + v.videoId;
+    return hiddenVideos.has(key) && !permanentHidden.has(key);
+  });
   const count = filteredVideos.length;
   document.getElementById('feed-title').textContent = `🚫 Hidden Videos (${count})`;
   renderVideoGrid();
@@ -1599,8 +1603,8 @@ async function permanentRemoveVideo(videoId, contractVersion) {
     }
     permanentHidden.add(hiddenKey);
     hiddenVideos.add(hiddenKey);
-    applyFilters();
-    showToast('Permanently removed — written to GitHub');
+    showHiddenVideos(); // refresh hidden tab — permanently removed ones vanish immediately
+    showToast('Permanently removed — gone from your view');
   } catch(e) {
     showToast('Error: ' + e.message, true);
   }
@@ -1629,7 +1633,7 @@ async function banAndRemoveVideo(videoId, contractVersion, uploaderWallet) {
     }
     permanentHidden.add(hiddenKey);
     hiddenVideos.add(hiddenKey);
-    applyFilters();
+    showHiddenVideos(); // refresh hidden tab — permanently removed ones vanish immediately
     showToast('Wallet banned + video permanently removed');
   } catch(e) {
     showToast('Error: ' + e.message, true);
