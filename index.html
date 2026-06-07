@@ -973,7 +973,7 @@ function showFeed() {
 // ════════════════════════════════════════════════════════
 async function connectWallet() {
   try {
-    if (!window.ethereum) { showToast('No wallet found — install Trust Wallet or MetaMask', true); return; }
+    if (!window.ethereum) { showToast('No wallet detected. On a phone? Open this site inside the Trust Wallet app browser (Discover tab), not Chrome/Safari.', true); return; }
     provider = new ethers.BrowserProvider(window.ethereum);
     await provider.send('eth_requestAccounts', []);
     const network = await provider.getNetwork();
