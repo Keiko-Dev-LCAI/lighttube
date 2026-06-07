@@ -678,7 +678,7 @@ function renderVideoGrid() {
 
     const hiddenKey = (v.contractVersion || 'v2') + '-' + v.videoId;
     const isHidden = hiddenVideos.has(hiddenKey);
-    const orcaMintBtn = `<button class="video-action-btn gold" onclick="event.stopPropagation();openOrcaMint(${v.videoId})" title="Mint as NFT on OrcaMint">🪙 Mint</button>`;
+    const orcaMintBtn = ``;
     const orcaLearnBtn = '';
     const shareBtn = `<button class="video-action-btn" onclick="event.stopPropagation();copyVideoLink(${v.videoId},this)">📤 Share</button>`;
     const chainBtn = v.txHash ? `<a class="video-action-btn" href="${LIGHTSCAN_TX}${v.txHash}" target="_blank" onclick="event.stopPropagation()">🔗 Chain</a>` : '';
@@ -781,14 +781,14 @@ async function playVideo(videoId) {
      <span>Uploaded by <a class="video-uploader" href="${LIGHTSCAN_ADDR}${v.uploader}" target="_blank">${shortAddr}</a></span>
      <span>${formatTimeAgo(v.timestamp)}</span>`;
 
-  const mintBtn    = `<button class="btn btn-gold btn-sm" onclick="openOrcaMint(${v.videoId})">🪙 Mint as NFT</button>`;
+  const mintBtn    = ``;
   const learnBtn   = '';
   const shareBtn   = `<button class="btn btn-outline btn-sm" id="player-share-btn" onclick="copyVideoLink(${v.videoId},this)">📤 Share Link</button>`;
   const chainBtn   = v.txHash ? `<a class="btn btn-outline btn-sm" href="${LIGHTSCAN_TX}${v.txHash}" target="_blank">🔗 View on Chain</a>` : '';
   const contactBtn = parseContact(v.description)
     ? `<button class="btn btn-outline btn-sm" onclick="contactCreator('${v.uploader}')">✉️ Message Creator</button>`
     : '';
-  document.getElementById('player-actions').innerHTML = mintBtn + learnBtn + shareBtn + chainBtn + contactBtn;
+  document.getElementById('player-actions').innerHTML = learnBtn + shareBtn + chainBtn + contactBtn;
 
   // Load media
   const wrap = document.getElementById('player-video-wrap');
