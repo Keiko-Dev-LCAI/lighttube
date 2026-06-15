@@ -1105,19 +1105,21 @@ function processFile(file) {
     tmpVid.src = tmpUrl;
   }
 
-  const reader = new FileReader();
-  reader.onload = e => {
-    selectedDataURI = e.target.result;
+  // ── Estimate chunk count from file.size — NEVER load whole file into memory ──
+  // readAsDataURL on large files causes Aw Snap / SIGILL OOM crash.
+  // base64 expands raw bytes by 4/3; add ~30 bytes for the data-URI header.
+  // selectedDataURI is not used by doUpload() (which sends via FormData), so
+  // we skip reading the file entirely and compute the estimate mathematically.
+  {
     const mb   = (file.size / 1024 / 1024).toFixed(1);
-    // Use relay chunk size (90KB) for accurate estimate
     const RELAY_CHUNK = 90_000;
-    const chunks  = Math.ceil(selectedDataURI.length / RELAY_CHUNK);
+    const estimatedDataURILen = Math.ceil(file.size * 4 / 3) + 30;
+    const chunks  = Math.ceil(estimatedDataURILen / RELAY_CHUNK);
     const estMins = Math.ceil((chunks * 5) / 60);
     const timeStr = estMins <= 1 ? 'under a minute' : `~${estMins} minutes`;
     document.getElementById('chunk-hint-box').innerHTML =
       `<div class="chunk-hint">✅ Ready — sign once, relay uploads in the background. No gas fees. You can open other browser tabs while it uploads — just don't close this one! (${mb} MB · ~${chunks} chunks · est. ${timeStr})</div>`;
-  };
-  reader.readAsDataURL(file);
+  }
 }
 
 function estimateUpload(byteSize) {
