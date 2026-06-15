@@ -684,7 +684,7 @@ function renderVideoGrid() {
     const isHidden = hiddenVideos.has(hiddenKey);
     const orcaMintBtn = ``;
     const orcaLearnBtn = '';
-    const shareBtn = `<button class="video-action-btn" onclick="event.stopPropagation();copyVideoLink(${v.videoId},this)">📤 Share</button>`;
+    const shareBtn = `<button class="video-action-btn" onclick="event.stopPropagation();copyVideoLink(${v.videoId},'${v.contractVersion||'v2'}',this)">📤 Share</button>`;
     const chainBtn = v.txHash ? `<a class="video-action-btn" href="${LIGHTSCAN_TX}${v.txHash}" target="_blank" onclick="event.stopPropagation()">🔗 Chain</a>` : '';
     const chunkedBadge = v.isChunked ? `<span class="chunked-badge">⛓ ${v.totalChunks} chunks</span>` : '';
     const hiddenBadge  = (isAdmin && isHidden) ? `<span style="background:rgba(232,82,82,0.12);border:1px solid rgba(232,82,82,.3);color:var(--red);font-size:14px;padding:4px 10px;border-radius:8px;font-weight:700">🚫 Hidden</span>` : '';
@@ -788,7 +788,7 @@ async function playVideo(videoId, contractVersion) {
 
   const mintBtn    = ``;
   const learnBtn   = '';
-  const shareBtn   = `<button class="btn btn-outline btn-sm" id="player-share-btn" onclick="copyVideoLink(${v.videoId},this)">📤 Share Link</button>`;
+  const shareBtn   = `<button class="btn btn-outline btn-sm" id="player-share-btn" onclick="copyVideoLink(${v.videoId},'${v.contractVersion||'v2'}',this)">📤 Share Link</button>`;
   const chainBtn   = v.txHash ? `<a class="btn btn-outline btn-sm" href="${LIGHTSCAN_TX}${v.txHash}" target="_blank">🔗 View on Chain</a>` : '';
   const contactBtn = parseContact(v.description)
     ? `<button class="btn btn-outline btn-sm" onclick="contactCreator('${v.uploader}')">✉️ Message Creator</button>`
@@ -1271,8 +1271,9 @@ async function doUpload() {
 // ════════════════════════════════════════════════════════
 //  SHARE & MINT
 // ════════════════════════════════════════════════════════
-function copyVideoLink(videoId, btn) {
-  const url = `${location.origin}${location.pathname}?video=${videoId}`;
+function copyVideoLink(videoId, contractVersion, btn) {
+  const cv  = (typeof contractVersion === 'string') ? contractVersion : 'v2';
+  const url = `${location.origin}${location.pathname}?video=${videoId}&cv=${cv}`;
   navigator.clipboard.writeText(url).then(() => {
     const orig = btn.textContent || btn.innerHTML;
     if (btn.textContent !== undefined) btn.textContent = '✅ Copied!';
@@ -1298,10 +1299,11 @@ window.addEventListener('load', () => {
   const params = new URLSearchParams(location.search);
   const videoId = params.get('video');
   if (videoId) {
+    const cv = params.get('cv') || 'v2';
     const waitAndPlay = setInterval(() => {
       if (allVideos.length > 0) {
         clearInterval(waitAndPlay);
-        playVideo(parseInt(videoId));
+        playVideo(parseInt(videoId), cv);
       }
     }, 500);
     setTimeout(() => clearInterval(waitAndPlay), 15000);
