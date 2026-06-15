@@ -1165,54 +1165,91 @@ async function doUpload() {
     const signer    = await provider.getSigner();
     const signature = await signer.signMessage(message);
 
-    document.getElementById('cp-status').textContent = 'Uploading to relay server…';
+    document.getElementById('cp-status').textContent = 'Registering upload…';
 
-    // ── Step 2: send file + signature to relay server ─────────────────
-    const formData = new FormData();
-    formData.append('video',       file);
-    formData.append('wallet',      wallet.toLowerCase());
-    formData.append('signature',   signature);
-    formData.append('title',       title);
-    formData.append('description', desc);
-    formData.append('category',    category);
-    formData.append('timestamp',   timestamp);
-    if (selectedThumbnail) formData.append('thumbnail', selectedThumbnail);
+    // ── Step 2A: init chunked upload session on relay server ──────────
+    const PIECE_SIZE  = 5 * 1024 * 1024; // 5 MB transport pieces (unrelated to on-chain CHUNK_SIZE)
+    const totalPieces = Math.ceil(file.size / PIECE_SIZE);
 
-    const startRes = await fetch(`${RELAY_SERVER}/api/lighttube/upload`, {
-      method: 'POST',
-      body:   formData,
+    const initRes = await fetch(`${RELAY_SERVER}/api/lighttube/upload-init`, {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({
+        wallet:      wallet.toLowerCase(),
+        signature,
+        timestamp,
+        title,
+        description: desc,
+        category,
+        totalPieces,
+        fileName:    file.name || 'video.mp4',
+        thumbnail:   selectedThumbnail || null,
+      }),
     });
-    if (!startRes.ok) {
-      const err = await startRes.json().catch(() => ({}));
-      throw new Error(err.error || 'Relay server error');
+    if (!initRes.ok) {
+      const err = await initRes.json().catch(() => ({}));
+      throw new Error(err.error || 'Upload init failed');
     }
-    const { jobId } = await startRes.json();
+    const { jobId } = await initRes.json();
 
-    // ── Step 3: poll for progress ─────────────────────────────────────
+    // ── Step 2B: send file in 5 MB pieces (0–60% progress bar) ───────
+    for (let i = 0; i < totalPieces; i++) {
+      const start = i * PIECE_SIZE;
+      const end   = Math.min(start + PIECE_SIZE, file.size);
+      const piece = file.slice(start, end);
+
+      const fd = new FormData();
+      fd.append('jobId',      jobId);
+      fd.append('pieceIndex', String(i));
+      fd.append('piece',      piece, 'piece');
+
+      const pieceRes = await fetch(`${RELAY_SERVER}/api/lighttube/upload-piece`, {
+        method: 'POST',
+        body:   fd,
+      });
+      if (!pieceRes.ok) {
+        const err = await pieceRes.json().catch(() => ({}));
+        throw new Error(err.error || `Upload piece ${i} failed`);
+      }
+
+      // Progress 0–60% = sending file to relay
+      const pct = Math.round(((i + 1) / totalPieces) * 60);
+      document.getElementById('cp-bar').style.width = pct + '%';
+      document.getElementById('cp-pct').textContent = pct + '%';
+      const sentMB  = Math.round((i + 1) * PIECE_SIZE / 1024 / 1024);
+      const totalMB = Math.round(file.size / 1024 / 1024);
+      document.getElementById('cp-status').textContent = `Uploading ${sentMB} MB of ${totalMB} MB…`;
+    }
+
+    document.getElementById('cp-status').textContent = 'Processing on blockchain…';
+    document.getElementById('cp-bar').style.width = '60%';
+    document.getElementById('cp-pct').textContent = '60%';
+
+    // ── Step 3: poll for blockchain progress (60–100%) ────────────────
     await new Promise((resolve, reject) => {
       const poll = setInterval(async () => {
         try {
-          const res  = await fetch(`${RELAY_SERVER}/api/lighttube/upload-progress/${jobId}`);
-          const job  = await res.json();
+          const res = await fetch(`${RELAY_SERVER}/api/lighttube/upload-progress/${jobId}`);
+          const job = await res.json();
           if (!res.ok || job.error === 'Job not found') {
             clearInterval(poll);
             reject(new Error('Server restarted mid-upload — please upload again'));
             return;
           }
-          let pct = 0;
-          if (job.status === 'initializing') pct = 3;
-          else if (job.total > 0) pct = Math.min(99, Math.round((job.progress / job.total) * 100));
+          // Blockchain progress: 60–100%
+          let pct = 60;
+          if (job.status === 'initializing') pct = 63;
+          else if (job.total > 0) pct = 60 + Math.min(40, Math.round((job.progress / job.total) * 40));
           document.getElementById('cp-bar').style.width = pct + '%';
           document.getElementById('cp-pct').textContent = pct + '%';
 
           if (job.status === 'initializing') {
             document.getElementById('cp-status').textContent = 'Registering video on chain…';
           } else if (job.status === 'uploading') {
-            document.getElementById('cp-status').textContent =
-              `Uploading chunk ${job.progress} of ${job.total}…`;
+            document.getElementById('cp-status').textContent = `On-chain: chunk ${job.progress} of ${job.total}…`;
           } else if (job.status === 'complete') {
             clearInterval(poll);
-            resolve(job.videoId);
+            resolve(job);
           } else if (job.status === 'error') {
             clearInterval(poll);
             reject(new Error(job.error || 'Upload failed'));
