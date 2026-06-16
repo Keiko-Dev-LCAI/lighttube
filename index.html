@@ -864,10 +864,28 @@ async function playVideo(videoId, contractVersion) {
         const chunkCt    = (v.contractVersion === 'v3' && readContractV3) ? readContractV3 : readContract;
         const total = v.totalChunks;
         let completed = 0;
+        // Query a chunk with a fallback for repaired chunks at recent blocks.
+        // If the initial fromBlock→latest query returns empty, the RPC may have
+        // hit its block-range limit and missed events near "latest".
+        // The fallback searches the most recent 500k blocks explicitly.
+        async function queryChunkEvts(chunkIndex) {
+          const f = chunkCt.filters.VideoChunkStored(videoId, chunkIndex);
+          let evts = [];
+          try { evts = await chunkCt.queryFilter(f, fromBlock, toBlock); } catch(e) {}
+          if (!evts.length) {
+            try {
+              const latest = await readProvider.getBlockNumber();
+              const recentFrom = Math.max(fromBlock, latest - 500_000);
+              if (recentFrom > fromBlock) {
+                evts = await chunkCt.queryFilter(f, recentFrom, 'latest');
+              }
+            } catch(e) {}
+          }
+          return evts;
+        }
         // Fetch every chunk in parallel, updating progress as each one arrives
         const chunkPromises = Array.from({length: total}, (_, i) => {
-          const f = chunkCt.filters.VideoChunkStored(videoId, i);
-          return chunkCt.queryFilter(f, fromBlock, toBlock).then(res => {
+          return queryChunkEvts(i).then(res => {
             completed++;
             plBar.style.width   = `${Math.round(completed / total * 100)}%`;
             plCount.textContent = `${completed} / ${total} chunks`;
