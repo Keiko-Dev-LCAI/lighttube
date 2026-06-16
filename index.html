@@ -1828,79 +1828,119 @@ async function runRepairVideo() {
     return;
   }
 
-  const btn = document.getElementById('repair-run-btn');
-  btn.disabled = true;
-  document.getElementById('repair-status-msg').textContent = '⏳ Uploading file and scanning blockchain…';
+  const videoId     = parseInt(videoIdVal);
+  const file        = _repairFile;
+  const btn         = document.getElementById('repair-run-btn');
+  btn.disabled      = true;
+  const PIECE_SIZE  = 5 * 1024 * 1024;
+  const totalPieces = Math.ceil(file.size / PIECE_SIZE);
+
+  // Show progress overlay right away
+  closeRepairPanel();
+  const overlay = document.getElementById('repair-progress-overlay');
+  overlay.style.display = 'flex';
+  document.getElementById('repair-overlay-title').textContent = `Repairing video #${videoId}`;
+  document.getElementById('repair-overlay-status').textContent = '📤 Uploading file… 0%';
+  document.getElementById('repair-bar').style.width = '0%';
+  document.getElementById('repair-pct').textContent = '0%';
 
   try {
-    const fd = new FormData();
-    fd.append('adminKey', key);
-    fd.append('videoId', videoIdVal);
-    fd.append('file', _repairFile);
+    // ── Step 1: init chunked repair session ─────────────────────────────
+    const initFd = new FormData();
+    initFd.append('repairVideoId', String(videoId));
+    initFd.append('adminKey',      key);
+    initFd.append('totalPieces',   String(totalPieces));
+    initFd.append('fileName',      file.name || 'video.mp4');
 
-    const res  = await fetch(`${RELAY_SERVER}/api/lighttube/repair-video`, { method: 'POST', body: fd });
-    const data = await res.json();
-
-    if (!res.ok) {
-      if (res.status === 401) { _adminKey = null; sessionStorage.removeItem('lt_ak'); }
-      document.getElementById('repair-status-msg').textContent = '❌ ' + (data.error || 'Failed');
-      btn.disabled = false;
-      return;
+    const initRes = await fetch(`${RELAY_SERVER}/api/lighttube/upload-init`, {method: 'POST', body: initFd});
+    if (!initRes.ok) {
+      const err = await initRes.json().catch(() => ({}));
+      if (initRes.status === 401) { _adminKey = null; sessionStorage.removeItem('lt_ak'); }
+      throw new Error(err.error || 'Init failed');
     }
+    const { jobId } = await initRes.json();
 
-    if (data.missing === 0) {
-      document.getElementById('repair-status-msg').textContent =
-        `✅ All ${data.total} chunks already on-chain — nothing to repair!`;
-      btn.disabled = false;
-      return;
-    }
-
-    // Close form, show progress overlay
-    closeRepairPanel();
-    const overlay = document.getElementById('repair-progress-overlay');
-    overlay.style.display = 'flex';
-    document.getElementById('repair-overlay-title').textContent =
-      `Repairing video #${videoIdVal}`;
-    document.getElementById('repair-overlay-status').textContent =
-      `Found ${data.missing} missing chunk(s) out of ${data.total} — submitting now…`;
-    document.getElementById('repair-bar').style.width = '0%';
-    document.getElementById('repair-pct').textContent = '0%';
-
-    // Poll progress
-    const jobId = data.jobId;
-    _repairPollInterval = setInterval(async () => {
-      try {
-        const pr  = await fetch(`${RELAY_SERVER}/api/lighttube/upload-progress/${jobId}`);
-        const pd  = await pr.json();
-        const pct = pd.total > 0 ? Math.round((pd.progress / pd.total) * 100) : 0;
-        document.getElementById('repair-bar').style.width = pct + '%';
-        document.getElementById('repair-pct').textContent = pct + '%';
-        document.getElementById('repair-overlay-status').textContent =
-          `${pd.progress} / ${pd.total} missing chunks repaired…`;
-
-        if (pd.status === 'complete') {
-          clearInterval(_repairPollInterval);
-          document.getElementById('repair-overlay-status').textContent =
-            `✅ Done! Repaired ${pd.total} missing chunks for video #${videoIdVal}.`;
-          document.getElementById('repair-bar').style.width = '100%';
-          document.getElementById('repair-pct').textContent = '100%';
-          setTimeout(() => {
-            overlay.style.display = 'none';
-            showToast(`✅ Repaired ${pd.total} missing chunks — video #${videoIdVal} should now play fully`);
-          }, 3000);
-        } else if (pd.status === 'error') {
-          clearInterval(_repairPollInterval);
-          overlay.style.display = 'none';
-          showToast('Repair failed: ' + (pd.error || 'unknown error'), true);
-        }
-      } catch(e) {
-        // transient network hiccup — keep polling
+    // ── Step 2: send file in 5 MB pieces (0–60% progress) ───────────────
+    for (let i = 0; i < totalPieces; i++) {
+      const piece = file.slice(i * PIECE_SIZE, (i + 1) * PIECE_SIZE);
+      const pfd   = new FormData();
+      pfd.append('jobId',       jobId);
+      pfd.append('pieceIndex',  String(i));
+      pfd.append('totalPieces', String(totalPieces));
+      pfd.append('piece',       piece, 'piece');
+      const pieceRes = await fetch(`${RELAY_SERVER}/api/lighttube/upload-piece`, {method: 'POST', body: pfd});
+      if (!pieceRes.ok) {
+        const err = await pieceRes.json().catch(() => ({}));
+        throw new Error(err.error || `Piece ${i} failed`);
       }
-    }, 2500);
+      const pct     = Math.round(((i + 1) / totalPieces) * 60);
+      const sentMB  = Math.round((i + 1) * PIECE_SIZE / 1024 / 1024);
+      const totalMB = Math.round(file.size / 1024 / 1024);
+      document.getElementById('repair-bar').style.width = pct + '%';
+      document.getElementById('repair-pct').textContent = pct + '%';
+      document.getElementById('repair-overlay-status').textContent =
+        `📤 Uploading file… ${sentMB} MB of ${totalMB} MB`;
+    }
+
+    document.getElementById('repair-bar').style.width = '60%';
+    document.getElementById('repair-pct').textContent = '60%';
+    document.getElementById('repair-overlay-status').textContent = '🔍 Scanning blockchain…';
+
+    // ── Step 3: poll blockchain repair progress (60–100%) ────────────────
+    const pd = await new Promise((resolve, reject) => {
+      _repairPollInterval = setInterval(async () => {
+        try {
+          const pr = await fetch(`${RELAY_SERVER}/api/lighttube/upload-progress/${jobId}`);
+          const d  = await pr.json();
+          if (d.status === 'repairing' || d.status === 'initializing' || d.status === 'receiving') {
+            // Blockchain scan in progress — hold at 60%
+            document.getElementById('repair-overlay-status').textContent =
+              '🔍 Scanning blockchain for missing chunks…';
+          } else if (d.status === 'uploading') {
+            // Submitting missing chunks — 60–100%
+            const repairPct = d.total > 0 ? Math.round(60 + (d.progress / d.total) * 40) : 60;
+            document.getElementById('repair-bar').style.width = repairPct + '%';
+            document.getElementById('repair-pct').textContent = repairPct + '%';
+            document.getElementById('repair-overlay-status').textContent =
+              `🔍 Scanning blockchain & repairing… ${d.progress} / ${d.total} chunks`;
+          } else if (d.status === 'complete') {
+            clearInterval(_repairPollInterval);
+            _repairPollInterval = null;
+            resolve(d);
+          } else if (d.status === 'error') {
+            clearInterval(_repairPollInterval);
+            _repairPollInterval = null;
+            reject(new Error(d.error || 'Repair failed'));
+          }
+        } catch(e) { /* transient network hiccup — keep polling */ }
+      }, 2500);
+    });
+
+    // ── Done ─────────────────────────────────────────────────────────────
+    document.getElementById('repair-bar').style.width = '100%';
+    document.getElementById('repair-pct').textContent = '100%';
+    if (!pd.total || pd.total === 0) {
+      document.getElementById('repair-overlay-status').textContent =
+        '✅ All chunks already on-chain — nothing to repair!';
+      setTimeout(() => {
+        overlay.style.display = 'none';
+        showToast(`✅ Video #${videoId} is complete — no missing chunks found`);
+      }, 3000);
+    } else {
+      document.getElementById('repair-overlay-status').textContent =
+        `✅ Done! Repaired ${pd.total} missing chunks for video #${videoId}.`;
+      setTimeout(() => {
+        overlay.style.display = 'none';
+        showToast(`✅ Repaired ${pd.total} missing chunks — video #${videoId} should now play fully`);
+      }, 3000);
+    }
 
   } catch(e) {
-    document.getElementById('repair-status-msg').textContent = '❌ Network error: ' + e.message;
+    if (_repairPollInterval) { clearInterval(_repairPollInterval); _repairPollInterval = null; }
+    overlay.style.display = 'none';
     btn.disabled = false;
+    document.getElementById('repair-modal').style.display = 'block';
+    document.getElementById('repair-status-msg').textContent = '❌ ' + (e.message || String(e));
   }
 }
 </script>
