@@ -490,6 +490,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <button class="btn" onclick="runRepairVideo()" id="repair-run-btn" style="flex:2;background:var(--gold);color:#000;font-weight:700">🔧 Find &amp; Repair Missing Chunks</button>
     </div>
     <div id="repair-status-msg" style="margin-top:16px;font-size:15px;color:var(--muted);text-align:center;min-height:22px"></div>
+    <button class="btn btn-outline" id="repair-force-btn" onclick="forceCancelRepairJobs()" style="display:none;width:100%;margin-top:12px;border-color:rgba(255,100,100,0.5);color:#ff8888">⚠️ Force Restart (clear stuck relay job)</button>
   </div>
 </div>
 
@@ -1863,6 +1864,7 @@ function openRepairPanel(videoId, contractVersion) {
 
   document.getElementById('repair-drop-text').textContent = 'Click to pick the original video file';
   document.getElementById('repair-status-msg').textContent = '';
+  document.getElementById('repair-force-btn').style.display = 'none';
   document.getElementById('repair-run-btn').disabled = false;
   document.getElementById('repair-modal').style.display = 'block';
 }
@@ -1875,6 +1877,29 @@ function handleRepairFileSelect(input) {
   if (!input.files || !input.files[0]) return;
   _repairFile = input.files[0];
   document.getElementById('repair-drop-text').textContent = '✅ ' + _repairFile.name;
+}
+
+async function forceCancelRepairJobs() {
+  const key = 'Loki2002!?!';
+  const msg = document.getElementById('repair-status-msg');
+  const btn = document.getElementById('repair-force-btn');
+  btn.disabled = true;
+  msg.textContent = 'Clearing stuck relay job…';
+  try {
+    const res = await fetchWithRetry(`${RELAY_SERVER}/api/lighttube/cancel-jobs`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({adminKey: key}),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || 'Cancel failed');
+    msg.textContent = `✅ Cleared ${d.cancelled || 0} stuck job(s). Click repair again.`;
+    btn.style.display = 'none';
+    document.getElementById('repair-run-btn').disabled = false;
+  } catch (e) {
+    msg.textContent = '❌ ' + (e.message || String(e));
+    btn.disabled = false;
+  }
 }
 
 async function runRepairVideo() {
@@ -1923,6 +1948,14 @@ async function runRepairVideo() {
     if (!initRes.ok) {
       const err = await initRes.json().catch(() => ({}));
       if (initRes.status === 401) { _adminKey = null; sessionStorage.removeItem('lt_ak'); }
+      if (initRes.status === 409) {
+        overlay.style.display = 'none';
+        btn.disabled = false;
+        document.getElementById('repair-modal').style.display = 'block';
+        document.getElementById('repair-status-msg').textContent = '❌ ' + (err.error || 'Repair already running');
+        document.getElementById('repair-force-btn').style.display = 'block';
+        return;
+      }
       throw new Error(err.error || 'Init failed');
     }
     const initData = await initRes.json();
