@@ -246,6 +246,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <button class="btn btn-gold btn-sm" id="btn-upload" onclick="openUpload()" style="display:none">+ Upload</button>
     <button class="btn btn-outline btn-sm" id="btn-channel" onclick="showMyChannel()" style="display:none">My Channel</button>
     <button class="btn btn-sm" id="btn-hidden" onclick="showHiddenVideos()" style="display:none;background:rgba(232,82,82,0.15);border:1px solid rgba(232,82,82,0.4);color:var(--red)">🚫 Hidden</button>
+    <button class="btn btn-sm" id="btn-repair" onclick="openRepairPanel()" style="display:none;background:rgba(255,180,0,0.12);border:1px solid rgba(255,180,0,0.4);color:var(--gold)">🔧 Repair</button>
     <button class="btn btn-outline btn-sm" id="btn-disconnect" onclick="disconnectWallet()" style="display:none;font-size:12px">Disconnect</button>
   </div>
 </nav>
@@ -458,6 +459,47 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <button class="btn btn-gold" onclick="saveSetThumbnail()" style="flex:2" id="thumb-save-btn" disabled>🖼️ Set Thumbnail</button>
     </div>
   </div>
+</div>
+
+<!-- ── REPAIR VIDEO MODAL (admin only) ── -->
+<div id="repair-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:600;overflow-y:auto;padding:20px">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:100%;max-width:620px;margin:auto;padding:32px;overflow-x:hidden">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px">
+      <div style="font-size:24px;font-weight:800">🔧 Repair Video</div>
+      <button onclick="closeRepairPanel()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">✕</button>
+    </div>
+    <p style="color:var(--muted);font-size:16px;line-height:1.65;margin-bottom:24px">
+      Scans the blockchain to find which chunks are already stored for a video, then re-submits only the missing ones. Use this to fix videos that freeze mid-playback.
+    </p>
+    <div class="form-group" style="margin-bottom:18px">
+      <label class="form-label">Video ID (on-chain integer)</label>
+      <input class="form-input" id="repair-video-id" type="number" min="1" placeholder="e.g. 42">
+    </div>
+    <div class="form-group" style="margin-bottom:24px">
+      <label class="form-label">Original video file</label>
+      <div class="drop-zone" id="repair-drop-zone" onclick="document.getElementById('repair-file-input').click()" style="cursor:pointer">
+        <div class="drop-zone-icon">🎬</div>
+        <div class="drop-zone-text" id="repair-drop-text">Click to pick the original video file</div>
+        <div class="drop-zone-sub">Same file that was originally uploaded</div>
+      </div>
+      <input type="file" id="repair-file-input" accept="video/*" style="display:none" onchange="handleRepairFileSelect(this)">
+    </div>
+    <div style="display:flex;gap:12px">
+      <button class="btn btn-outline" onclick="closeRepairPanel()" style="flex:1">Cancel</button>
+      <button class="btn" onclick="runRepairVideo()" id="repair-run-btn" style="flex:2;background:var(--gold);color:#000;font-weight:700">🔧 Find &amp; Repair Missing Chunks</button>
+    </div>
+    <div id="repair-status-msg" style="margin-top:16px;font-size:15px;color:var(--muted);text-align:center;min-height:22px"></div>
+  </div>
+</div>
+
+<!-- ── REPAIR PROGRESS OVERLAY ── -->
+<div id="repair-progress-overlay" style="display:none;position:fixed;inset:0;background:rgba(13,11,24,.97);z-index:810;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:40px;text-align:center">
+  <div style="font-size:52px">🔧⛓️</div>
+  <div style="font-size:22px;font-weight:800;color:var(--gold);max-width:600px" id="repair-overlay-title">Repairing video…</div>
+  <div style="font-size:18px;color:var(--text);min-height:28px" id="repair-overlay-status">Scanning blockchain…</div>
+  <div class="cp-bar-track"><div id="repair-bar" style="height:100%;background:linear-gradient(90deg,var(--gold),var(--purple));border-radius:6px;width:0%;transition:width .4s"></div></div>
+  <div style="font-size:18px;font-weight:700;color:var(--muted)" id="repair-pct">0%</div>
+  <div style="font-size:15px;color:var(--muted);max-width:560px;line-height:1.65">Submitting missing chunks via relay wallet. Don't close this tab.</div>
 </div>
 
 <!-- ── LOADING OVERLAY ── -->
@@ -1024,6 +1066,7 @@ function updateWalletUI(connected) {
   document.getElementById('btn-upload').style.display     = connected ? '' : 'none';
   document.getElementById('btn-channel').style.display    = connected ? '' : 'none';
   document.getElementById('btn-hidden').style.display     = (connected && isAdmin) ? '' : 'none';
+  document.getElementById('btn-repair').style.display     = (connected && isAdmin) ? '' : 'none';
   document.getElementById('btn-disconnect').style.display = connected ? '' : 'none';
   if (connected) {
     document.getElementById('btn-disconnect').textContent = wallet.slice(0,6) + '…' + wallet.slice(-4);
@@ -1742,6 +1785,122 @@ async function unhideVideo(videoId, contractVersion) {
     showToast('Video restored to feed');
   } catch(e) {
     showToast('Error: ' + e.message, true);
+  }
+}
+
+// ── Admin: Repair Video ────────────────────────────────────────────────────────
+
+let _repairFile = null;
+let _repairPollInterval = null;
+
+function openRepairPanel() {
+  if (!isAdmin) return;
+  _repairFile = null;
+  document.getElementById('repair-video-id').value = '';
+  document.getElementById('repair-drop-text').textContent = 'Click to pick the original video file';
+  document.getElementById('repair-status-msg').textContent = '';
+  document.getElementById('repair-run-btn').disabled = false;
+  document.getElementById('repair-modal').style.display = 'block';
+}
+
+function closeRepairPanel() {
+  document.getElementById('repair-modal').style.display = 'none';
+}
+
+function handleRepairFileSelect(input) {
+  if (!input.files || !input.files[0]) return;
+  _repairFile = input.files[0];
+  document.getElementById('repair-drop-text').textContent = '✅ ' + _repairFile.name;
+}
+
+async function runRepairVideo() {
+  if (!isAdmin) return;
+  const key = getAdminKey();
+  if (!key) return;
+
+  const videoIdVal = document.getElementById('repair-video-id').value.trim();
+  if (!videoIdVal || isNaN(parseInt(videoIdVal))) {
+    document.getElementById('repair-status-msg').textContent = '⚠️ Enter a valid video ID (integer)';
+    return;
+  }
+  if (!_repairFile) {
+    document.getElementById('repair-status-msg').textContent = '⚠️ Please pick the original video file';
+    return;
+  }
+
+  const btn = document.getElementById('repair-run-btn');
+  btn.disabled = true;
+  document.getElementById('repair-status-msg').textContent = '⏳ Uploading file and scanning blockchain…';
+
+  try {
+    const fd = new FormData();
+    fd.append('adminKey', key);
+    fd.append('videoId', videoIdVal);
+    fd.append('file', _repairFile);
+
+    const res  = await fetch(`${RELAY_SERVER}/api/lighttube/repair-video`, { method: 'POST', body: fd });
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (res.status === 401) { _adminKey = null; sessionStorage.removeItem('lt_ak'); }
+      document.getElementById('repair-status-msg').textContent = '❌ ' + (data.error || 'Failed');
+      btn.disabled = false;
+      return;
+    }
+
+    if (data.missing === 0) {
+      document.getElementById('repair-status-msg').textContent =
+        `✅ All ${data.total} chunks already on-chain — nothing to repair!`;
+      btn.disabled = false;
+      return;
+    }
+
+    // Close form, show progress overlay
+    closeRepairPanel();
+    const overlay = document.getElementById('repair-progress-overlay');
+    overlay.style.display = 'flex';
+    document.getElementById('repair-overlay-title').textContent =
+      `Repairing video #${videoIdVal}`;
+    document.getElementById('repair-overlay-status').textContent =
+      `Found ${data.missing} missing chunk(s) out of ${data.total} — submitting now…`;
+    document.getElementById('repair-bar').style.width = '0%';
+    document.getElementById('repair-pct').textContent = '0%';
+
+    // Poll progress
+    const jobId = data.jobId;
+    _repairPollInterval = setInterval(async () => {
+      try {
+        const pr  = await fetch(`${RELAY_SERVER}/api/lighttube/upload-progress/${jobId}`);
+        const pd  = await pr.json();
+        const pct = pd.total > 0 ? Math.round((pd.progress / pd.total) * 100) : 0;
+        document.getElementById('repair-bar').style.width = pct + '%';
+        document.getElementById('repair-pct').textContent = pct + '%';
+        document.getElementById('repair-overlay-status').textContent =
+          `${pd.progress} / ${pd.total} missing chunks repaired…`;
+
+        if (pd.status === 'complete') {
+          clearInterval(_repairPollInterval);
+          document.getElementById('repair-overlay-status').textContent =
+            `✅ Done! Repaired ${pd.total} missing chunks for video #${videoIdVal}.`;
+          document.getElementById('repair-bar').style.width = '100%';
+          document.getElementById('repair-pct').textContent = '100%';
+          setTimeout(() => {
+            overlay.style.display = 'none';
+            showToast(`✅ Repaired ${pd.total} missing chunks — video #${videoIdVal} should now play fully`);
+          }, 3000);
+        } else if (pd.status === 'error') {
+          clearInterval(_repairPollInterval);
+          overlay.style.display = 'none';
+          showToast('Repair failed: ' + (pd.error || 'unknown error'), true);
+        }
+      } catch(e) {
+        // transient network hiccup — keep polling
+      }
+    }, 2500);
+
+  } catch(e) {
+    document.getElementById('repair-status-msg').textContent = '❌ Network error: ' + e.message;
+    btn.disabled = false;
   }
 }
 </script>
