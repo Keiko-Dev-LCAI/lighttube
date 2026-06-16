@@ -473,7 +473,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     </p>
     <div class="form-group" style="margin-bottom:18px">
       <label class="form-label">Video ID (on-chain integer)</label>
-      <input class="form-input" id="repair-video-id" type="number" min="1" placeholder="e.g. 42">
+      <input class="form-input" id="repair-video-id" type="number" min="1" placeholder="e.g. 19 (King Kong)">
     </div>
     <div class="form-group" style="margin-bottom:24px">
       <label class="form-label">Original video file</label>
@@ -893,8 +893,16 @@ async function playVideo(videoId, contractVersion) {
           });
         });
         const results   = await Promise.all(chunkPromises);
-        const rawChunks = results.map(evts => (evts[0] && evts[0].args[3]) || '');
+        const rawChunks = results.map(evts => {
+          if (!evts || !evts.length) return '';
+          const latest = evts[evts.length - 1];
+          return (latest && latest.args[3]) || '';
+        });
         if (!rawChunks.some(c => c)) throw new Error('No video data found — chunks may not be on chain yet');
+        const missingCount = rawChunks.filter(c => !c).length;
+        if (missingCount > 0) {
+          throw new Error(`Video incomplete — ${missingCount.toLocaleString()} of ${total.toLocaleString()} chunks missing on blockchain. Use 🔧 Repair (admin) to fix.`);
+        }
 
         // Detect MIME type from the first chunk's data URI header
         plText.innerHTML = '<span class="pl-spin">⛓</span> Assembling video…';
@@ -1918,8 +1926,9 @@ async function runRepairVideo() {
             const repairPct = d.total > 0 ? Math.round(60 + (d.progress / d.total) * 40) : 60;
             document.getElementById('repair-bar').style.width = repairPct + '%';
             document.getElementById('repair-pct').textContent = repairPct + '%';
+            const onChain = d.present_count != null ? `${d.present_count.toLocaleString()} on-chain, ` : '';
             document.getElementById('repair-overlay-status').textContent =
-              `🔍 Scanning blockchain & repairing… ${d.progress} / ${d.total} chunks`;
+              `⛓ Uploading missing chunks… ${onChain}${d.progress.toLocaleString()} / ${d.total.toLocaleString()} submitted (may take hours)`;
           } else if (d.status === 'complete') {
             clearInterval(_repairPollInterval);
             _repairPollInterval = null;
