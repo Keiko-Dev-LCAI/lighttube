@@ -1962,14 +1962,26 @@ async function runRepairVideo() {
               : '⏳ Working…';
             document.getElementById('repair-overlay-status').textContent = phaseMsg;
           } else if (d.status === 'uploading') {
-            // Submitting missing chunks — 60–100%
-            const repairPct = d.total > 0 ? Math.round(60 + (d.progress / d.total) * 40) : 60;
-            document.getElementById('repair-bar').style.width = repairPct + '%';
-            document.getElementById('repair-pct').textContent = repairPct + '%';
-            const onChain = d.present_count != null ? `${d.present_count.toLocaleString()} on-chain, ` : '';
-            const stored  = d.repaired != null ? `, ${d.repaired.toLocaleString()} stored on-chain` : '';
-            document.getElementById('repair-overlay-status').textContent =
-              `⛓ Uploading missing chunks… ${onChain}${d.progress.toLocaleString()} / ${d.total.toLocaleString()} tried${stored}`;
+            if (d.phase === 'flushing') {
+              const fp = d.flush_progress != null ? d.flush_progress : 0;
+              const ft = d.flush_total != null ? d.flush_total : '?';
+              document.getElementById('repair-bar').style.width = '60%';
+              document.getElementById('repair-pct').textContent = '60%';
+              document.getElementById('repair-overlay-status').textContent =
+                `🧹 Clearing stuck relay transactions… ${fp} / ${ft} (slow chain — can take 10–20 min)`;
+            } else {
+              // Submitting missing chunks — 60–100%
+              const repairPct = d.total > 0 ? Math.round(60 + (d.progress / d.total) * 40) : 60;
+              document.getElementById('repair-bar').style.width = repairPct + '%';
+              document.getElementById('repair-pct').textContent = repairPct + '%';
+              const onChain = d.present_count != null ? `${d.present_count.toLocaleString()} on-chain, ` : '';
+              const stored  = d.repaired != null ? `, ${d.repaired.toLocaleString()} stored on-chain` : '';
+              const waiting = (d.progress || 0) === 0 && (d.repaired || 0) === 0
+                ? ' (first chunk can take up to 15 min on this chain)'
+                : '';
+              document.getElementById('repair-overlay-status').textContent =
+                `⛓ Uploading missing chunks… ${onChain}${d.progress.toLocaleString()} / ${d.total.toLocaleString()} tried${stored}${waiting}`;
+            }
           } else if (d.status === 'complete') {
             clearInterval(_repairPollInterval);
             _repairPollInterval = null;
