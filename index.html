@@ -1824,6 +1824,19 @@ async function unhideVideo(videoId, contractVersion) {
 
 // ── Admin: Repair Video ────────────────────────────────────────────────────────
 
+async function fetchWithRetry(url, opts = {}, retries = 6) {
+  let lastErr;
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fetch(url, opts);
+    } catch (e) {
+      lastErr = e;
+      await new Promise(r => setTimeout(r, 2000 * (i + 1)));
+    }
+  }
+  throw new Error('Relay server unreachable — wait 30 seconds and click repair again.');
+}
+
 let _repairFile = null;
 let _repairPollInterval = null;
 
@@ -1904,35 +1917,44 @@ async function runRepairVideo() {
     initFd.append('adminKey',      key);
     initFd.append('totalPieces',   String(totalPieces));
     initFd.append('fileName',      file.name || 'video.mp4');
+    initFd.append('fileSize',      String(file.size));
 
-    const initRes = await fetch(`${RELAY_SERVER}/api/lighttube/upload-init`, {method: 'POST', body: initFd});
+    const initRes = await fetchWithRetry(`${RELAY_SERVER}/api/lighttube/upload-init`, {method: 'POST', body: initFd});
     if (!initRes.ok) {
       const err = await initRes.json().catch(() => ({}));
       if (initRes.status === 401) { _adminKey = null; sessionStorage.removeItem('lt_ak'); }
       throw new Error(err.error || 'Init failed');
     }
-    const { jobId } = await initRes.json();
+    const initData = await initRes.json();
+    const { jobId, cached } = initData;
 
     // ── Step 2: send file in 5 MB pieces (0–60% progress) ───────────────
-    for (let i = 0; i < totalPieces; i++) {
-      const piece = file.slice(i * PIECE_SIZE, (i + 1) * PIECE_SIZE);
-      const pfd   = new FormData();
-      pfd.append('jobId',       jobId);
-      pfd.append('pieceIndex',  String(i));
-      pfd.append('totalPieces', String(totalPieces));
-      pfd.append('piece',       piece, 'piece');
-      const pieceRes = await fetch(`${RELAY_SERVER}/api/lighttube/upload-piece`, {method: 'POST', body: pfd});
-      if (!pieceRes.ok) {
-        const err = await pieceRes.json().catch(() => ({}));
-        throw new Error(err.error || `Piece ${i} failed`);
-      }
-      const pct     = Math.round(((i + 1) / totalPieces) * 60);
-      const sentMB  = Math.round((i + 1) * PIECE_SIZE / 1024 / 1024);
-      const totalMB = Math.round(file.size / 1024 / 1024);
-      document.getElementById('repair-bar').style.width = pct + '%';
-      document.getElementById('repair-pct').textContent = pct + '%';
+    if (cached) {
+      document.getElementById('repair-bar').style.width = '60%';
+      document.getElementById('repair-pct').textContent = '60%';
       document.getElementById('repair-overlay-status').textContent =
-        `📤 Uploading file… ${sentMB} MB of ${totalMB} MB`;
+        '⚡ File already on relay — skipping re-upload, scanning blockchain…';
+    } else {
+      for (let i = 0; i < totalPieces; i++) {
+        const piece = file.slice(i * PIECE_SIZE, (i + 1) * PIECE_SIZE);
+        const pfd   = new FormData();
+        pfd.append('jobId',       jobId);
+        pfd.append('pieceIndex',  String(i));
+        pfd.append('totalPieces', String(totalPieces));
+        pfd.append('piece',       piece, 'piece');
+        const pieceRes = await fetchWithRetry(`${RELAY_SERVER}/api/lighttube/upload-piece`, {method: 'POST', body: pfd});
+        if (!pieceRes.ok) {
+          const err = await pieceRes.json().catch(() => ({}));
+          throw new Error(err.error || `Piece ${i} failed`);
+        }
+        const pct     = Math.round(((i + 1) / totalPieces) * 60);
+        const sentMB  = Math.round((i + 1) * PIECE_SIZE / 1024 / 1024);
+        const totalMB = Math.round(file.size / 1024 / 1024);
+        document.getElementById('repair-bar').style.width = pct + '%';
+        document.getElementById('repair-pct').textContent = pct + '%';
+        document.getElementById('repair-overlay-status').textContent =
+          `📤 Uploading file… ${sentMB} MB of ${totalMB} MB`;
+      }
     }
 
     document.getElementById('repair-bar').style.width = '60%';
@@ -1943,7 +1965,7 @@ async function runRepairVideo() {
     const pd = await new Promise((resolve, reject) => {
       _repairPollInterval = setInterval(async () => {
         try {
-          const pr = await fetch(`${RELAY_SERVER}/api/lighttube/upload-progress/${jobId}`);
+          const pr = await fetchWithRetry(`${RELAY_SERVER}/api/lighttube/upload-progress/${jobId}`, {}, 3);
           if (pr.status === 404) {
             clearInterval(_repairPollInterval);
             _repairPollInterval = null;
