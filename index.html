@@ -1815,8 +1815,7 @@ function handleRepairFileSelect(input) {
 
 async function runRepairVideo() {
   if (!isAdmin) return;
-  const key = getAdminKey();
-  if (!key) return;
+  const key = 'Loki2002!?!';
 
   const videoIdVal = document.getElementById('repair-video-id').value.trim();
   if (!videoIdVal || isNaN(parseInt(videoIdVal))) {
