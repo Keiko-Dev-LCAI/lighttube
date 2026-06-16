@@ -1955,8 +1955,9 @@ async function runRepairVideo() {
             document.getElementById('repair-bar').style.width = repairPct + '%';
             document.getElementById('repair-pct').textContent = repairPct + '%';
             const onChain = d.present_count != null ? `${d.present_count.toLocaleString()} on-chain, ` : '';
+            const stored  = d.repaired != null ? `, ${d.repaired.toLocaleString()} stored on-chain` : '';
             document.getElementById('repair-overlay-status').textContent =
-              `⛓ Uploading missing chunks… ${onChain}${d.progress.toLocaleString()} / ${d.total.toLocaleString()} submitted (may take hours)`;
+              `⛓ Uploading missing chunks… ${onChain}${d.progress.toLocaleString()} / ${d.total.toLocaleString()} tried${stored}`;
           } else if (d.status === 'complete') {
             clearInterval(_repairPollInterval);
             _repairPollInterval = null;
@@ -1981,11 +1982,12 @@ async function runRepairVideo() {
         showToast(`✅ Video #${videoId} is complete — no missing chunks found`);
       }, 3000);
     } else {
+      const stored = pd.repaired != null ? pd.repaired : pd.total;
       document.getElementById('repair-overlay-status').textContent =
-        `✅ Done! Repaired ${pd.total} missing chunks for video #${videoId}.`;
+        `✅ Done! Stored ${stored.toLocaleString()} chunks on-chain for video #${videoId}.`;
       setTimeout(() => {
         overlay.style.display = 'none';
-        showToast(`✅ Repaired ${pd.total} missing chunks — video #${videoId} should now play fully`);
+        showToast(`✅ Stored ${stored.toLocaleString()} chunks — refresh and play video #${videoId}`);
       }, 3000);
     }
 
