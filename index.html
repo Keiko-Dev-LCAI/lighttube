@@ -1957,6 +1957,8 @@ async function runRepairVideo() {
               ? '📦 Preparing file on relay server (base64 encode ~10–20 min for 2 GB)…'
               : phase === 'scanning'
               ? '🔍 Scanning blockchain for missing chunks (~5 min)…'
+              : phase === 'flushing'
+              ? '🧹 Clearing stuck relay transactions (~2–5 min)…'
               : '⏳ Working…';
             document.getElementById('repair-overlay-status').textContent = phaseMsg;
           } else if (d.status === 'uploading') {
