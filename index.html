@@ -1944,11 +1944,21 @@ async function runRepairVideo() {
       _repairPollInterval = setInterval(async () => {
         try {
           const pr = await fetch(`${RELAY_SERVER}/api/lighttube/upload-progress/${jobId}`);
+          if (pr.status === 404) {
+            clearInterval(_repairPollInterval);
+            _repairPollInterval = null;
+            reject(new Error('Repair job lost (relay may have restarted). Hard refresh and run repair again.'));
+            return;
+          }
           const d  = await pr.json();
           if (d.status === 'repairing' || d.status === 'initializing' || d.status === 'receiving') {
-            // Blockchain scan in progress — hold at 60%
-            document.getElementById('repair-overlay-status').textContent =
-              '🔍 Scanning blockchain for missing chunks…';
+            const phase = d.phase || (d.status === 'initializing' ? 'encoding' : 'scanning');
+            const phaseMsg = phase === 'encoding'
+              ? '📦 Preparing file on relay server (base64 encode ~10–20 min for 2 GB)…'
+              : phase === 'scanning'
+              ? '🔍 Scanning blockchain for missing chunks (~5 min)…'
+              : '⏳ Working…';
+            document.getElementById('repair-overlay-status').textContent = phaseMsg;
           } else if (d.status === 'uploading') {
             // Submitting missing chunks — 60–100%
             const repairPct = d.total > 0 ? Math.round(60 + (d.progress / d.total) * 40) : 60;
