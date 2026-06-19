@@ -93,6 +93,14 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 #feed-empty h2{font-size:32px;font-weight:700;color:var(--text);margin-bottom:14px}
 #feed-empty p{font-size:20px}
 #feed-loading{text-align:center;padding:80px;color:var(--muted);font-size:22px}
+#pagination-top,#pagination-bottom{display:none;align-items:center;justify-content:center;gap:10px;padding:14px 0}
+#pagination-top{margin-bottom:18px}
+#pagination-bottom{margin-top:24px}
+.pg-btn{background:var(--bg2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 20px;font-size:18px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+.pg-btn:hover:not(:disabled){border-color:var(--gold);color:var(--gold)}
+.pg-btn:disabled{opacity:0.35;cursor:default}
+.pg-btn.active{background:rgba(232,184,75,0.18);border-color:var(--gold);color:var(--gold)}
+#pg-info{font-size:18px;color:var(--muted);white-space:nowrap}
 
 /* ── VIDEO PLAYER MODAL ── */
 #player-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:500;overflow-y:auto;padding:20px}
@@ -197,7 +205,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   /* Feed */
   #feed-section{padding:20px 16px}
   #feed-title{font-size:26px}
-  #video-grid{grid-template-columns:1fr;gap:18px}
+  #video-grid{grid-template-columns:repeat(2,1fr);gap:10px}
 
   /* Empty / hero CTA */
   .hero-title{font-size:30px}
@@ -206,10 +214,20 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   .hero-cta .btn{width:100%;justify-content:center}
   #feed-empty .btn{width:100%;justify-content:center}
 
-  /* Video cards */
-  .video-card-body{padding:16px}
-  .video-title{font-size:18px}
-  .video-action-btn{padding:9px 14px;font-size:15px}
+  /* Video cards (2-col mobile) */
+  .video-card{border-radius:10px}
+  .video-card-body{padding:10px}
+  .video-category{font-size:12px;padding:3px 8px;margin-bottom:7px}
+  .video-title{font-size:15px;margin-bottom:7px}
+  .video-tags{display:none}
+  .video-meta{font-size:13px;gap:6px;margin-bottom:10px}
+  .video-actions{gap:6px}
+  .video-action-btn{padding:7px 10px;font-size:13px}
+  .video-duration{font-size:13px;padding:3px 7px}
+
+  /* Pagination */
+  #pagination-top,#pagination-bottom{flex-wrap:wrap;gap:8px}
+  .pg-btn{padding:9px 14px;font-size:15px}
 
   /* Upload modal */
   #upload-modal{padding:8px}
@@ -306,7 +324,9 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <span id="video-count"></span>
   </div>
   <div id="feed-loading">⛓️ Loading videos from Lightchain…</div>
+  <div id="pagination-top"></div>
   <div id="video-grid" style="display:none"></div>
+  <div id="pagination-bottom"></div>
   <div id="feed-empty" style="display:none">
     <div class="empty-icon">🎬</div>
     <h2>No videos yet</h2>
@@ -552,6 +572,7 @@ const ADMIN_WALLETS  = [
   '0xa3a653a8cba0710ff57ac34e2278c603b4259fd3', // Trust Wallet Account 1
   '0x2b6b64cc13dd6d5acabcf3a5dd72b6ee8004de35', // Lightchain Node wallet
 ];
+const VIDEOS_PER_PAGE = 20;
 
 const CONTRACT_ABI = [
   "event VideoUploaded(uint256 indexed videoId, address indexed uploader, string title, string description, string category, string dataURI, uint256 timestamp)",
@@ -579,6 +600,7 @@ let writeContract   = null;   // V2 (legacy)
 let writeContractV3 = null;   // V3 (for updateMetadata)
 let allVideos     = [];
 let filteredVideos= [];
+let currentPage   = 1;
 let currentCategory = 'all';
 let selectedFile      = null;
 let selectedDataURI   = null;
@@ -698,6 +720,44 @@ async function loadAllVideos() {
 // ════════════════════════════════════════════════════════
 //  RENDER
 // ════════════════════════════════════════════════════════
+function renderPagination() {
+  const totalPages = Math.ceil(filteredVideos.length / VIDEOS_PER_PAGE);
+  const pgTop    = document.getElementById('pagination-top');
+  const pgBottom = document.getElementById('pagination-bottom');
+  if (totalPages <= 1) {
+    pgTop.style.display = 'none';
+    pgBottom.style.display = 'none';
+    return;
+  }
+  function pgHtml(pos) {
+    const isTop = pos === 'top';
+    let html = `<button class="pg-btn" onclick="goToPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹ Prev</button>`;
+    // show up to 5 page buttons around current
+    const start = Math.max(1, currentPage - 2);
+    const end   = Math.min(totalPages, currentPage + 2);
+    if (start > 1) html += `<button class="pg-btn" onclick="goToPage(1)">1</button>${start > 2 ? '<span style="color:var(--muted)">…</span>' : ''}`;
+    for (let p = start; p <= end; p++) {
+      html += `<button class="pg-btn${p===currentPage?' active':''}" onclick="goToPage(${p})">${p}</button>`;
+    }
+    if (end < totalPages) html += `${end < totalPages-1 ? '<span style="color:var(--muted)">…</span>' : ''}<button class="pg-btn" onclick="goToPage(${totalPages})">${totalPages}</button>`;
+    html += `<button class="pg-btn" onclick="goToPage(${currentPage+1})" ${currentPage===totalPages?'disabled':''}>Next ›</button>`;
+    html += `<span id="pg-info${isTop?'-top':'-bot'}">${currentPage} / ${totalPages}</span>`;
+    return html;
+  }
+  pgTop.innerHTML    = pgHtml('top');
+  pgBottom.innerHTML = pgHtml('bot');
+  pgTop.style.display    = 'flex';
+  pgBottom.style.display = 'flex';
+}
+
+function goToPage(p) {
+  const totalPages = Math.ceil(filteredVideos.length / VIDEOS_PER_PAGE);
+  if (p < 1 || p > totalPages) return;
+  currentPage = p;
+  renderVideoGrid();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
 function renderVideoGrid() {
   prewarmVisibleChunkedVideos();
   const grid = document.getElementById('video-grid');
@@ -708,14 +768,23 @@ function renderVideoGrid() {
     grid.style.display = 'none';
     empty.style.display = 'block';
     count.textContent = '';
+    document.getElementById('pagination-top').style.display = 'none';
+    document.getElementById('pagination-bottom').style.display = 'none';
     return;
   }
+
+  const totalPages = Math.ceil(filteredVideos.length / VIDEOS_PER_PAGE);
+  if (currentPage > totalPages) currentPage = totalPages;
+  const start = (currentPage - 1) * VIDEOS_PER_PAGE;
+  const pageVideos = filteredVideos.slice(start, start + VIDEOS_PER_PAGE);
 
   empty.style.display = 'none';
   grid.style.display = 'grid';
   count.textContent = `${filteredVideos.length} video${filteredVideos.length !== 1 ? 's' : ''}`;
 
-  grid.innerHTML = filteredVideos.map(rawV => {
+  renderPagination();
+
+  grid.innerHTML = pageVideos.map(rawV => {
     const v = applyLtOverride(rawV);
     const timeAgo = formatTimeAgo(v.timestamp);
     const shortAddr = v.uploader.slice(0,6) + '…' + v.uploader.slice(-4);
@@ -798,6 +867,7 @@ function filterVideos() {
 }
 
 function applyFilters() {
+  currentPage = 1;
   const q = document.getElementById('search-input').value.toLowerCase().trim();
   filteredVideos = allVideos.filter(rawV => {
     const v = applyLtOverride(rawV);
@@ -1076,6 +1146,7 @@ function showMyChannel() {
 function showHiddenVideos() {
   if (!isAdmin) return;
   currentCategory = 'all';
+  currentPage = 1;
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('search-input').value = '';
   // Only show TEMPORARILY hidden videos — permanently removed ones are gone from view entirely
@@ -1090,6 +1161,7 @@ function showHiddenVideos() {
 
 function showChannel(addr) {
   currentCategory = 'all';
+  currentPage = 1;
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
   const q = document.getElementById('search-input');
   q.value = addr;
