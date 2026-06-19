@@ -523,6 +523,12 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
 <!-- ── SCRIPTS ── -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
+<script type="module">
+  try {
+    const { EthereumProvider } = await import('https://esm.sh/@walletconnect/ethereum-provider@2.17.3');
+    window.WCEthereumProvider = EthereumProvider;
+  } catch(e) { console.warn('WalletConnect unavailable:', e); }
+</script>
 <script>
 // ════════════════════════════════════════════════════════
 //  CONFIG
@@ -565,6 +571,7 @@ const CONTRACT_ABI = [
 let provider        = null;
 let signer          = null;
 let wallet          = null;
+let _wcProv         = null;
 let readProvider    = null;
 let readContract    = null;   // V2 read contract
 let readContractV3  = null;   // V3 read contract
@@ -1119,10 +1126,37 @@ function detectProvider() {
 }
 
 function openWalletPicker() {
-  var encoded = encodeURIComponent(LT_DAPP_URL);
-  document.getElementById('lt-tw-deep-link').href = 'https://link.trustwallet.com/open_url?coin_id=60&url=' + encoded;
-  document.getElementById('lt-mm-deep-link').href = 'https://metamask.app.link/dapp/keiko-dev-lcai.github.io/lighttube/';
+  if (window.WCEthereumProvider) { connectViaWalletConnect(); return; }
   document.getElementById('no-wallet-modal').style.display = 'flex';
+}
+
+async function connectViaWalletConnect() {
+  document.getElementById('no-wallet-modal').style.display = 'none';
+  if (!window.WCEthereumProvider) { showToast('WalletConnect not loaded yet. Try again.', true); return; }
+  try {
+    _wcProv = await window.WCEthereumProvider.init({
+      projectId: '3c6a0da53258912a28923198ddac3333',
+      chains: [9200], optionalChains: [1], showQrModal: true,
+      metadata: { name: 'LightTube', description: 'Video on Lightchain', url: 'https://lighttube.win', icons: ['https://lighttube.win/favicon.png'] },
+      rpcMap: { 9200: 'https://rpc.mainnet.lightchain.ai' }
+    });
+    await _wcProv.enable();
+    provider = new ethers.BrowserProvider(_wcProv);
+    await provider.send('eth_requestAccounts', []);
+    try { await provider.send('wallet_switchEthereumChain', [{ chainId: '0x23F0' }]); }
+    catch { await provider.send('wallet_addEthereumChain', [{ chainId: '0x23F0', chainName: 'Lightchain AI', nativeCurrency: { name: 'LCAI', symbol: 'LCAI', decimals: 18 }, rpcUrls: ['https://rpc.mainnet.lightchain.ai'], blockExplorerUrls: ['https://mainnet.lightscan.app'] }]); }
+    signer = await provider.getSigner();
+    wallet = await signer.getAddress();
+    writeContract   = new ethers.Contract(CONTRACT_ADDRESS_V2, CONTRACT_ABI, signer);
+    if (CONTRACT_ADDRESS_V3 !== 'DEPLOY_V3_ADDRESS_HERE') writeContractV3 = new ethers.Contract(CONTRACT_ADDRESS_V3, CONTRACT_ABI, signer);
+    isAdmin = ADMIN_WALLETS.includes(wallet.toLowerCase());
+    updateWalletUI(true);
+    renderVideoGrid();
+    showToast('Wallet connected!');
+  } catch(e) {
+    if (!e || e.message?.includes('User rejected') || e.message?.includes('rejected') || e.code === 4001) return;
+    showToast('WalletConnect failed. Try a different wallet.', true);
+  }
 }
 
 function copyDappLink() {
@@ -1175,6 +1209,7 @@ async function connectWallet() {
 function disconnectWallet() {
   provider = null; signer = null; wallet = null; writeContract = null; writeContractV3 = null;
   isAdmin = false;
+  if (_wcProv) { try { _wcProv.disconnect(); } catch {} _wcProv = null; }
   updateWalletUI(false);
   showFeed(); // always return to main feed on disconnect
   showToast('Disconnected');
@@ -2220,21 +2255,14 @@ async function generateDescription() {
   <div style="background:var(--bg2);border:1px solid var(--border);border-radius:20px;width:100%;max-width:400px;padding:32px 28px">
     <div style="font-size:42px;text-align:center;margin-bottom:12px">🔗</div>
     <div style="font-size:26px;font-weight:900;color:var(--text);text-align:center;margin-bottom:8px">Connect Wallet</div>
-    <p style="font-size:18px;color:var(--muted);line-height:1.6;text-align:center;margin-bottom:24px">No wallet detected in this browser. Open LightTube inside your wallet's built-in browser, or copy the link and paste it there.</p>
-    <a id="lt-tw-deep-link" href="#" target="_blank" style="display:flex;align-items:center;gap:14px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:10px;text-decoration:none;color:var(--text)">
-      <span style="font-size:30px;flex-shrink:0">🛡️</span>
+    <p style="font-size:18px;color:var(--muted);line-height:1.6;text-align:center;margin-bottom:24px">No wallet detected. Use WalletConnect to connect any wallet — QR code on desktop, wallet app links on mobile.</p>
+    <button onclick="connectViaWalletConnect()" style="display:flex;align-items:center;gap:14px;background:rgba(100,180,255,0.08);border:1px solid #64b4ff;border-radius:14px;padding:16px 18px;margin-bottom:10px;width:100%;text-align:left;color:var(--text);cursor:pointer;font-family:inherit">
+      <span style="font-size:30px;flex-shrink:0">🔗</span>
       <div>
-        <div style="font-size:18px;font-weight:700">Open in Trust Wallet</div>
-        <div style="font-size:15px;color:var(--muted)">Opens LightTube in Trust Wallet browser</div>
+        <div style="font-size:18px;font-weight:700">WalletConnect</div>
+        <div style="font-size:15px;color:var(--muted)">Scan QR on desktop · Open wallet app on mobile</div>
       </div>
-    </a>
-    <a id="lt-mm-deep-link" href="#" target="_blank" style="display:flex;align-items:center;gap:14px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:10px;text-decoration:none;color:var(--text)">
-      <span style="font-size:30px;flex-shrink:0">🦊</span>
-      <div>
-        <div style="font-size:18px;font-weight:700">Open in MetaMask</div>
-        <div style="font-size:15px;color:var(--muted)">Opens LightTube in MetaMask browser</div>
-      </div>
-    </a>
+    </button>
     <button id="lt-copy-link-btn" onclick="copyDappLink()" style="display:flex;align-items:center;gap:14px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:14px;padding:16px 18px;width:100%;text-align:left;color:var(--text);cursor:pointer;margin-bottom:20px;font-family:inherit">
       <span style="font-size:30px;flex-shrink:0">🔗</span>
       <div>
