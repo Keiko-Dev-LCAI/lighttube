@@ -106,8 +106,15 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 #player-meta{font-size:19px;color:var(--muted);margin-bottom:18px;display:flex;gap:16px;flex-wrap:wrap}
 #player-description{font-size:20px;color:var(--text);line-height:1.65;margin-bottom:20px}
 #player-actions{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px}
-#player-close{position:absolute;top:16px;right:16px;background:rgba(0,0,0,0.7);border:none;color:#fff;width:48px;height:48px;border-radius:50%;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10}
+#player-close{position:absolute;top:16px;right:16px;background:rgba(0,0,0,0.7);border:none;color:#fff;width:48px;height:48px;border-radius:50%;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:20}
 .player-top{position:relative}
+#player-loading{position:absolute;left:0;right:0;bottom:0;top:auto;background:rgba(0,0,0,0.88);flex-direction:column;align-items:stretch;justify-content:flex-end;gap:6px;padding:10px 14px 12px;z-index:12;border-top:1px solid rgba(155,127,232,0.35)}
+#player-loading.dismissed{display:none!important}
+#player-loading #pl-text{font-size:14px;font-weight:600;color:var(--purple);display:flex;align-items:center;gap:6px}
+#player-loading #pl-count{font-size:13px;color:var(--muted)}
+#pl-dismiss{align-self:flex-end;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;font-size:12px;padding:4px 10px;border-radius:6px;cursor:pointer;margin-bottom:2px}
+#pl-dismiss:hover{background:rgba(255,255,255,0.18)}
+.player-prep-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1}
 
 /* ── UPLOAD MODAL ── */
 #upload-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:500;overflow-y:auto;padding:20px}
@@ -317,11 +324,12 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <button id="player-close" onclick="closePlayer()">✕</button>
       <div id="player-video-wrap" style="position:relative">
         <div class="player-placeholder" id="player-placeholder">🎬</div>
-        <!-- Loading overlay — shown inside video area while chunks download -->
-        <div id="player-loading" style="display:none;position:absolute;inset:0;background:rgba(10,10,20,0.92);flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;border-radius:12px;z-index:10">
-          <div id="pl-text" style="font-size:18px;font-weight:700;color:var(--purple);display:flex;align-items:center;gap:8px;text-align:center"><span class="pl-spin">⛓</span> Downloading from blockchain…</div>
-          <div style="width:90%;height:10px;background:var(--bg3);border-radius:6px;overflow:hidden"><div id="pl-bar" style="height:100%;background:linear-gradient(90deg,var(--purple),var(--gold));border-radius:6px;width:0%;transition:width .25s"></div></div>
-          <div id="pl-count" style="font-size:16px;color:var(--muted)">0 / 0 chunks</div>
+        <!-- Slim bottom bar while relay prepares stream (dismissible — video/thumb stays visible) -->
+        <div id="player-loading" style="display:none">
+          <button type="button" id="pl-dismiss" onclick="dismissStreamProgress()">✕ Hide progress</button>
+          <div id="pl-text"><span class="pl-spin">⛓</span> Preparing stream…</div>
+          <div style="width:100%;height:6px;background:var(--bg3);border-radius:4px;overflow:hidden"><div id="pl-bar" style="height:100%;background:linear-gradient(90deg,var(--purple),var(--gold));border-radius:4px;width:0%;transition:width .25s"></div></div>
+          <div id="pl-count">0 / 0 chunks</div>
         </div>
       </div>
     </div>
@@ -571,6 +579,7 @@ let selectedDuration  = null;
 let selectedThumbnail = null;
 let chunkCache       = new Map(); // videoId → relay stream URL (chunked videos)
 const streamPrewarm  = new Set(); // dedupe background relay warm-ups
+let _streamPollToken = 0;         // bumped on closePlayer to stop background polls
 let _currentPlayerVideo = null; // {videoId, contractVersion, title} — source of truth for repair
 let hiddenVideos     = new Set(); // videoIds hidden by admin (server-side)
 let permanentHidden  = new Set(); // subset that are permanently removed (cannot be restored)
@@ -831,6 +840,36 @@ function prewarmChunkedStream(contractVersion, videoId) {
   fetch(`${RELAY_SERVER}/api/media/stream/lighttube/${cv}/${videoId}/status`).catch(() => {});
 }
 
+function dismissStreamProgress() {
+  const el = document.getElementById('player-loading');
+  if (el) el.classList.add('dismissed');
+}
+
+function showStreamProgressBar() {
+  const el = document.getElementById('player-loading');
+  if (el) {
+    el.classList.remove('dismissed');
+    el.style.display = 'flex';
+  }
+}
+
+function hideStreamProgressBar() {
+  const el = document.getElementById('player-loading');
+  if (el) {
+    el.style.display = 'none';
+    el.classList.remove('dismissed');
+  }
+}
+
+function showPrepThumbnail(cv, videoId, wrap) {
+  wrap.querySelectorAll('.player-prep-thumb').forEach(e => e.remove());
+  const img = document.createElement('img');
+  img.className = 'player-prep-thumb';
+  img.src = `${GITHUB_THUMB}${cv}_${videoId}.jpg`;
+  img.alt = '';
+  wrap.insertBefore(img, wrap.firstChild);
+}
+
 function prewarmVisibleChunkedVideos() {
   filteredVideos.slice(0, 8).forEach(v => {
     if (v.isChunked) prewarmChunkedStream(v.contractVersion, v.videoId);
@@ -926,60 +965,64 @@ async function playVideo(videoId, contractVersion) {
     if (chunkCache.has(cacheKey)) {
       dataURI = chunkCache.get(cacheKey);
     } else {
-      loadingEl.style.display = 'flex';
+      const pollToken = ++_streamPollToken;
+      document.getElementById('player-placeholder').style.display = 'none';
+      showPrepThumbnail(cv, videoId, wrap);
+      showStreamProgressBar();
       plBar.style.width = '0%';
       plCount.textContent = `0 / ${v.totalChunks} chunks`;
-      plText.innerHTML = '<span class="pl-spin">⛓</span> One-time prep on relay — replays are instant for everyone';
-      document.getElementById('player-placeholder').textContent = '⛓';
+      plText.innerHTML = '<span class="pl-spin">⛓</span> One-time prep — replays instant for everyone';
       try {
         let videoEl = null;
         const attachStream = () => {
           if (videoEl) return;
-          document.getElementById('player-placeholder').style.display = 'none';
+          wrap.querySelectorAll('.player-prep-thumb').forEach(e => e.remove());
           videoEl = document.createElement('video');
           videoEl.src = streamUrl;
           videoEl.controls = true;
           videoEl.autoplay = true;
-          videoEl.style.cssText = 'width:100%;max-height:70vh;object-fit:contain;display:block;background:#000';
+          videoEl.style.cssText = 'width:100%;max-height:70vh;object-fit:contain;display:block;background:#000;position:relative;z-index:2';
           wrap.appendChild(videoEl);
         };
         const onProgress = (data, eta) => {
+          if (pollToken !== _streamPollToken) return;
           const total    = data.total || v.totalChunks;
           const progress = data.progress || 0;
           plBar.style.width   = `${data.percent || Math.round(progress / total * 100)}%`;
-          plCount.textContent = `${progress.toLocaleString()} / ${total.toLocaleString()} chunks`;
-          const note = data.firstTimeNote || 'One-time prep — replays are instant';
+          plCount.textContent = `${progress.toLocaleString()} / ${total.toLocaleString()} chunks${eta ? ' · ' + eta : ''}`;
           if (data.status === 'ready') {
-            plText.innerHTML = '▶ Ready — starting playback';
+            plText.innerHTML = '▶ Starting playback…';
+            attachStream();
+            hideStreamProgressBar();
           } else if (data.partial) {
-            plText.innerHTML = `<span class="pl-spin">⛓</span> Buffering… ${note}${eta ? ' · ' + eta : ''}`;
+            plText.innerHTML = `<span class="pl-spin">⛓</span> Buffering on relay…`;
+            attachStream();
           } else {
-            plText.innerHTML = `<span class="pl-spin">⛓</span> Relay assembling… ${note}${eta ? ' · ' + eta : ''}`;
+            plText.innerHTML = `<span class="pl-spin">⛓</span> Preparing on relay…`;
           }
-          if (data.status === 'ready' || data.partial) attachStream();
         };
         const result = await waitForChunkedStream(statusUrl, v.totalChunks, onProgress);
+        if (pollToken !== _streamPollToken) return;
         if (result.status === 'ready') {
           chunkCache.set(cacheKey, streamUrl);
-          loadingEl.style.display = 'none';
+          hideStreamProgressBar();
           return;
         }
-        // partial: keep polling until ready
-        while (true) {
+        while (pollToken === _streamPollToken) {
           const res  = await fetch(statusUrl);
           const data = await res.json().catch(() => ({}));
           onProgress(data, '');
           if (data.status === 'ready') {
             chunkCache.set(cacheKey, streamUrl);
-            loadingEl.style.display = 'none';
+            hideStreamProgressBar();
             return;
           }
           await new Promise(r => setTimeout(r, 2000));
         }
+        return;
       } catch(err) {
+        if (pollToken !== _streamPollToken) return;
         plText.textContent = '⚠️ ' + (err.message || 'Could not load video — try again');
-        plBar.style.display = 'none';
-        plCount.style.display = 'none';
         return;
       }
     }
@@ -1005,11 +1048,12 @@ async function playVideo(videoId, contractVersion) {
 }
 
 function closePlayer() {
+  _streamPollToken++;
+  hideStreamProgressBar();
   document.getElementById('player-modal').classList.remove('open');
   const wrap = document.getElementById('player-video-wrap');
-  // Pause video; chunked replays use cached relay stream URL
   wrap.querySelectorAll('video').forEach(v => { v.pause(); v.src = ''; });
-  wrap.querySelectorAll('video,img').forEach(e => e.remove());
+  wrap.querySelectorAll('video,img,.player-prep-thumb').forEach(e => e.remove());
   document.getElementById('player-placeholder').style.display = 'flex';
   document.getElementById('player-placeholder').textContent = '🎬';
 }
