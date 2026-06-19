@@ -569,7 +569,7 @@ let selectedFile      = null;
 let selectedDataURI   = null;
 let selectedDuration  = null;
 let selectedThumbnail = null;
-let chunkCache    = new Map(); // videoId → assembled dataURI
+let chunkCache    = new Map(); // videoId → relay stream URL (chunked videos)
 let _currentPlayerVideo = null; // {videoId, contractVersion, title} — source of truth for repair
 let hiddenVideos     = new Set(); // videoIds hidden by admin (server-side)
 let permanentHidden  = new Set(); // subset that are permanently removed (cannot be restored)
@@ -855,6 +855,8 @@ async function playVideo(videoId, contractVersion) {
 
   const cacheKey = (v.contractVersion||'v2') + '-' + videoId;
   if (v.isChunked) {
+    const streamUrl  = `${RELAY_SERVER}/api/media/stream/lighttube/${cv}/${videoId}`;
+    const statusUrl  = `${streamUrl}/status`;
     if (chunkCache.has(cacheKey)) {
       dataURI = chunkCache.get(cacheKey);
     } else {
@@ -865,107 +867,34 @@ async function playVideo(videoId, contractVersion) {
       const plText  = document.getElementById('pl-text');
       plBar.style.width = '0%';
       plCount.textContent = `0 / ${v.totalChunks} chunks`;
-      plText.innerHTML = '<span class="pl-spin">⛓</span> Downloading from blockchain…';
+      plText.innerHTML = '<span class="pl-spin">⛓</span> Preparing stream on relay…';
       document.getElementById('player-placeholder').textContent = '⛓';
       try {
-        const fromBlock  = v.blockNumber ? Math.max(0, v.blockNumber) : 0;
-        const toBlock    = 'latest';
-        const chunkCt    = (v.contractVersion === 'v3' && readContractV3) ? readContractV3 : readContract;
-        const total = v.totalChunks;
-        let completed = 0;
-        // Query a chunk with a fallback for repaired chunks at recent blocks.
-        // If the initial fromBlock→latest query returns empty, the RPC may have
-        // hit its block-range limit and missed events near "latest".
-        // The fallback searches the most recent 500k blocks explicitly.
-        async function queryChunkEvts(chunkIndex) {
-          const f = chunkCt.filters.VideoChunkStored(videoId, chunkIndex);
-          let evts = [];
-          try { evts = await chunkCt.queryFilter(f, fromBlock, toBlock); } catch(e) {}
-          if (!evts.length) {
-            try {
-              const latest = await readProvider.getBlockNumber();
-              const recentFrom = Math.max(fromBlock, latest - 500_000);
-              if (recentFrom > fromBlock) {
-                evts = await chunkCt.queryFilter(f, recentFrom, 'latest');
-              }
-            } catch(e) {}
+        const sleep = ms => new Promise(r => setTimeout(r, ms));
+        let ready = false;
+        for (let attempt = 0; attempt < 7200; attempt++) {
+          const res  = await fetch(statusUrl);
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok && res.status !== 500) {
+            throw new Error(data.error || `Stream status failed (${res.status})`);
           }
-          return evts;
+          if (data.status === 'error') {
+            throw new Error(data.error || 'Relay could not build stream');
+          }
+          const total    = data.total || v.totalChunks;
+          const progress = data.progress || 0;
+          plBar.style.width   = `${Math.round(progress / total * 100)}%`;
+          plCount.textContent = `${progress.toLocaleString()} / ${total.toLocaleString()} chunks`;
+          if (data.status === 'ready') {
+            ready = true;
+            break;
+          }
+          plText.innerHTML = '<span class="pl-spin">⛓</span> Relay assembling from blockchain…';
+          await sleep(3000);
         }
-        // Fetch every chunk in parallel, updating progress as each one arrives
-        const chunkPromises = Array.from({length: total}, (_, i) => {
-          return queryChunkEvts(i).then(res => {
-            completed++;
-            plBar.style.width   = `${Math.round(completed / total * 100)}%`;
-            plCount.textContent = `${completed} / ${total} chunks`;
-            return res;
-          });
-        });
-        const results   = await Promise.all(chunkPromises);
-        const rawChunks = results.map(evts => {
-          if (!evts || !evts.length) return '';
-          const latest = evts[evts.length - 1];
-          return (latest && latest.args[3]) || '';
-        });
-        if (!rawChunks.some(c => c)) throw new Error('No video data found — chunks may not be on chain yet');
-        const missingCount = rawChunks.filter(c => !c).length;
-        if (missingCount > 0) {
-          throw new Error(`Video incomplete — ${missingCount.toLocaleString()} of ${total.toLocaleString()} chunks missing on blockchain. Use 🔧 Repair (admin) to fix.`);
-        }
-
-        // Detect MIME type from the first chunk's data URI header
-        plText.innerHTML = '<span class="pl-spin">⛓</span> Assembling video…';
-        let mimeType = 'video/mp4';
-        const firstNonEmpty = rawChunks.find(c => c.startsWith('data:'));
-        if (firstNonEmpty) {
-          const m = firstNonEmpty.match(/^data:([^;]+);base64,/);
-          if (m) mimeType = m[1];
-        }
-
-        // Convert base64 chunks → Uint8Arrays, respecting 4-char base64 boundaries.
-        // The first chunk has a data URI prefix (22 chars) that makes its base64
-        // portion non-divisible by 4. Every subsequent chunk continues mid-group.
-        // We carry leftover chars across boundaries so atob() always sees complete
-        // 4-char groups — without this, every boundary produces ~3 corrupted bytes
-        // which breaks the MP4 header (duration, moov atom, etc.).
-        const byteArrays = [];
-        let carry = '';  // 0–3 leftover base64 chars from previous chunk
-        for (let ci = 0; ci < rawChunks.length; ci++) {
-          const chunk  = rawChunks[ci];
-          const b64raw = chunk.includes(',') ? chunk.split(',', 2)[1] : chunk;
-          if (!b64raw) continue;
-          const b64        = carry + b64raw;
-          const alignedLen = Math.floor(b64.length / 4) * 4;
-          carry            = b64.slice(alignedLen);   // save 0–3 chars for next chunk
-          const toDecode   = b64.slice(0, alignedLen);
-          if (!toDecode) continue;
-          const binary = atob(toDecode);
-          const bytes  = new Uint8Array(binary.length);
-          for (let j = 0; j < binary.length; j++) bytes[j] = binary.charCodeAt(j);
-          byteArrays.push(bytes);
-        }
-        // Flush any remaining carry chars with padding
-        if (carry) {
-          try {
-            const padded = carry + '='.repeat((4 - carry.length % 4) % 4);
-            const binary = atob(padded);
-            const bytes  = new Uint8Array(binary.length);
-            for (let j = 0; j < binary.length; j++) bytes[j] = binary.charCodeAt(j);
-            byteArrays.push(bytes);
-          } catch(e) { /* ignore trailing padding edge cases */ }
-        }
-
-        // Merge all Uint8Arrays into one contiguous buffer
-        const totalLen = byteArrays.reduce((s, a) => s + a.length, 0);
-        const merged   = new Uint8Array(totalLen);
-        let   pos      = 0;
-        for (const arr of byteArrays) { merged.set(arr, pos); pos += arr.length; }
-
-        // Create a Blob URL — no string length limit, plays as a stream
-        const blob    = new Blob([merged], { type: mimeType });
-        const blobUrl = URL.createObjectURL(blob);
-        chunkCache.set(cacheKey, blobUrl);
-        dataURI = blobUrl;
+        if (!ready) throw new Error('Stream preparation timed out — try again in a few minutes');
+        chunkCache.set(cacheKey, streamUrl);
+        dataURI = streamUrl;
       } catch(err) {
         plText.textContent = '⚠️ ' + (err.message || 'Could not load video — try again');
         plBar.style.display = 'none';
@@ -998,7 +927,7 @@ async function playVideo(videoId, contractVersion) {
 function closePlayer() {
   document.getElementById('player-modal').classList.remove('open');
   const wrap = document.getElementById('player-video-wrap');
-  // Pause video but keep blob URL alive in chunkCache so replay is instant
+  // Pause video; chunked replays use cached relay stream URL
   wrap.querySelectorAll('video').forEach(v => { v.pause(); v.src = ''; });
   wrap.querySelectorAll('video,img').forEach(e => e.remove());
   document.getElementById('player-placeholder').style.display = 'flex';
