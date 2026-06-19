@@ -742,7 +742,7 @@ function renderVideoGrid() {
     const orcaLearnBtn = '';
     const shareBtn = `<button class="video-action-btn" onclick="event.stopPropagation();copyVideoLink(${v.videoId},'${v.contractVersion||'v2'}',this)">📤 Share</button>`;
     const chainBtn = v.txHash ? `<a class="video-action-btn" href="${LIGHTSCAN_TX}${v.txHash}" target="_blank" onclick="event.stopPropagation()">🔗 Chain</a>` : '';
-    const chunkedBadge = v.isChunked ? `<span class="chunked-badge">⛓ ${v.totalChunks} chunks</span>` : '';
+    const chunkedBadge = ''; // chunk count hidden from UI — not meaningful to regular viewers
     const hiddenBadge  = (isAdmin && isHidden) ? `<span style="background:rgba(232,82,82,0.12);border:1px solid rgba(232,82,82,.3);color:var(--red);font-size:14px;padding:4px 10px;border-radius:8px;font-weight:700">🚫 Hidden</span>` : '';
     const hiddenKeyFull = (v.contractVersion || 'v2') + '-' + v.videoId;
     const isPermanent   = permanentHidden.has(hiddenKeyFull);
