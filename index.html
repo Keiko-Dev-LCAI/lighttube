@@ -284,27 +284,27 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
 <!-- ── CATEGORY BAR ── -->
 <div id="cat-bar">
-  <button class="cat-btn active" onclick="selectCategory('all',this)">🌐 All</button>
-  <button class="cat-btn" onclick="selectCategory('Movies',this)">🎬 Movies</button>
-  <button class="cat-btn" onclick="selectCategory('Horror',this)">👻 Horror</button>
-  <button class="cat-btn" onclick="selectCategory('Drama',this)">🎭 Drama</button>
-  <button class="cat-btn" onclick="selectCategory('Action',this)">💥 Action</button>
-  <button class="cat-btn" onclick="selectCategory('Sci-Fi',this)">🚀 Sci-Fi</button>
-  <button class="cat-btn" onclick="selectCategory('Documentary',this)">🎥 Documentary</button>
-  <button class="cat-btn" onclick="selectCategory('Animation',this)">✏️ Animation</button>
-  <button class="cat-btn" onclick="selectCategory('Thriller',this)">🔪 Thriller</button>
-  <button class="cat-btn" onclick="selectCategory('Music',this)">🎵 Music</button>
-  <button class="cat-btn" onclick="selectCategory('Comedy',this)">😂 Comedy</button>
-  <button class="cat-btn" onclick="selectCategory('Gaming',this)">🎮 Gaming</button>
-  <button class="cat-btn" onclick="selectCategory('Vlogging',this)">📹 Vlogging</button>
-  <button class="cat-btn" onclick="selectCategory('Sports',this)">⚽ Sports</button>
-  <button class="cat-btn" onclick="selectCategory('News',this)">📰 News</button>
-  <button class="cat-btn" onclick="selectCategory('Education',this)">🎓 Education</button>
-  <button class="cat-btn" onclick="selectCategory('Art',this)">🎨 Art</button>
-  <button class="cat-btn" onclick="selectCategory('Family',this)">👨‍👩‍👧 Family</button>
-  <button class="cat-btn" onclick="selectCategory('Tutorial',this)">🛠️ Tutorial</button>
-  <button class="cat-btn" onclick="selectCategory('Historical',this)">🏛️ Historical</button>
-  <button class="cat-btn" onclick="selectCategory('Other',this)">📎 Other</button>
+  <button class="cat-btn active" data-cat="all" onclick="selectCategory('all',this)">🌐 All</button>
+  <button class="cat-btn" data-cat="Movies" onclick="selectCategory('Movies',this)">🎬 Movies</button>
+  <button class="cat-btn" data-cat="Horror" onclick="selectCategory('Horror',this)">👻 Horror</button>
+  <button class="cat-btn" data-cat="Drama" onclick="selectCategory('Drama',this)">🎭 Drama</button>
+  <button class="cat-btn" data-cat="Action" onclick="selectCategory('Action',this)">💥 Action</button>
+  <button class="cat-btn" data-cat="Sci-Fi" onclick="selectCategory('Sci-Fi',this)">🚀 Sci-Fi</button>
+  <button class="cat-btn" data-cat="Documentary" onclick="selectCategory('Documentary',this)">🎥 Documentary</button>
+  <button class="cat-btn" data-cat="Animation" onclick="selectCategory('Animation',this)">✏️ Animation</button>
+  <button class="cat-btn" data-cat="Thriller" onclick="selectCategory('Thriller',this)">🔪 Thriller</button>
+  <button class="cat-btn" data-cat="Music" onclick="selectCategory('Music',this)">🎵 Music</button>
+  <button class="cat-btn" data-cat="Comedy" onclick="selectCategory('Comedy',this)">😂 Comedy</button>
+  <button class="cat-btn" data-cat="Gaming" onclick="selectCategory('Gaming',this)">🎮 Gaming</button>
+  <button class="cat-btn" data-cat="Vlogging" onclick="selectCategory('Vlogging',this)">📹 Vlogging</button>
+  <button class="cat-btn" data-cat="Sports" onclick="selectCategory('Sports',this)">⚽ Sports</button>
+  <button class="cat-btn" data-cat="News" onclick="selectCategory('News',this)">📰 News</button>
+  <button class="cat-btn" data-cat="Education" onclick="selectCategory('Education',this)">🎓 Education</button>
+  <button class="cat-btn" data-cat="Art" onclick="selectCategory('Art',this)">🎨 Art</button>
+  <button class="cat-btn" data-cat="Family" onclick="selectCategory('Family',this)">👨‍👩‍👧 Family</button>
+  <button class="cat-btn" data-cat="Tutorial" onclick="selectCategory('Tutorial',this)">🛠️ Tutorial</button>
+  <button class="cat-btn" data-cat="Historical" onclick="selectCategory('Historical',this)">🏛️ Historical</button>
+  <button class="cat-btn" data-cat="Other" onclick="selectCategory('Other',this)">📎 Other</button>
 </div>
 
 <!-- ── HERO (shown before videos load) ── -->
@@ -860,12 +860,16 @@ function renderVideoGrid() {
 //  FILTER & SEARCH
 // ════════════════════════════════════════════════════════
 function selectCategory(cat, btn) {
+  // "All" must fully reset the feed (search, channel view, tag filter) — same as logo click
+  if (cat === 'all') {
+    showFeed();
+    return;
+  }
   currentCategory = cat;
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   applyFilters();
-  const label = cat === 'all' ? 'All Videos' : cat + ' Videos';
-  document.getElementById('feed-title').textContent = label;
+  document.getElementById('feed-title').textContent = cat + ' Videos';
 }
 
 function filterVideos() {
@@ -880,14 +884,17 @@ function normalizeTitle(title) {
 function displayDedupeKey(rawV) {
   const v = applyLtOverride(rawV);
   const nt = normalizeTitle(v.title);
-  // NASA Artemis public-domain clip — many on-chain ids, same tags/titles
-  if (/\bartemis\b/.test(nt) && (/\blunar\b/.test(nt) || /\bflyby\b/.test(nt) || /\bmoon\b/.test(nt) || /\bnasa\b/.test(nt)))
-    return 'cluster:artemis-lunar';
+  const tags = parseTags(v.description).map(t => t.toLowerCase().trim()).filter(Boolean);
+  const tagStr = tags.join(' ');
+  // NASA Artemis public-domain clip — many on-chain ids from relay testing
+  if (/\bartemis\b/.test(nt) || /\bartemis\b/.test(tagStr))
+    return 'cluster:artemis';
   if (/\bnight\b/.test(nt) && /\bliving\b/.test(nt) && /\bdead\b/.test(nt))
     return 'cluster:notld';
-  const tags = parseTags(v.description).map(t => t.toLowerCase().trim()).filter(Boolean);
+  // Short titles (e.g. "Keiko"/"keiko" ghost uploads) — cluster by uploader + title
+  if (nt.length >= 3)
+    return 'uploader-title:' + v.uploader.toLowerCase() + ':' + nt;
   if (tags.length >= 3) return 'tags:' + [...new Set(tags)].sort().join(',');
-  if (nt.length >= 8) return 'title:' + nt;
   return 'id:' + (v.contractVersion || 'v2') + '-' + v.videoId;
 }
 
@@ -1237,7 +1244,7 @@ function showFeed() {
   document.getElementById('search-input').value = '';
   currentCategory = 'all';
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
-  document.querySelector('.cat-btn').classList.add('active');
+  document.querySelector('[data-cat="all"]')?.classList.add('active');
   document.getElementById('feed-title').textContent = 'All Videos';
   applyFilters();
 }
