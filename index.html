@@ -59,7 +59,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 #video-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:22px}
 
 /* ── VIDEO CARD ── */
-.video-card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;overflow:hidden;cursor:pointer;transition:all .2s}
+.video-card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;overflow:visible;cursor:pointer;transition:all .2s}
 .video-card:hover{border-color:var(--gold);transform:translateY(-2px)}
 .video-thumb{width:100%;aspect-ratio:16/9;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:64px;position:relative;overflow:hidden}
 .video-thumb video,.video-thumb img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
@@ -83,6 +83,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .video-uploader{color:var(--purple);font-weight:600;cursor:pointer}
 .video-uploader:hover{color:var(--gold)}
 .video-actions{display:flex;gap:10px;flex-wrap:wrap}
+.video-mod-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
 .video-action-btn{background:var(--bg3);border:1px solid var(--border);color:var(--muted);border-radius:10px;padding:11px 20px;font-size:17px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
 .video-action-btn:hover{border-color:var(--gold);color:var(--gold)}
 .video-action-btn.gold{background:rgba(232,184,75,0.15);border-color:var(--gold);color:var(--gold)}
@@ -580,6 +581,18 @@ const ADMIN_WALLETS  = [
   '0x2b6b64cc13dd6d5acabcf3a5dd72b6ee8004de35', // Lightchain Node wallet
 ];
 const VIDEOS_PER_PAGE = 20;
+const LT_BUILD = '20260624c'; // bump to bust browser cache after deploy
+
+(function ltBuildCheck() {
+  const k = 'lt_build_v';
+  if (localStorage.getItem(k) !== LT_BUILD) {
+    localStorage.setItem(k, LT_BUILD);
+    if (!sessionStorage.getItem('lt_reload_' + LT_BUILD)) {
+      sessionStorage.setItem('lt_reload_' + LT_BUILD, '1');
+      location.reload();
+    }
+  }
+})();
 
 const CONTRACT_ABI = [
   "event VideoUploaded(uint256 indexed videoId, address indexed uploader, string title, string description, string category, string dataURI, uint256 timestamp)",
@@ -830,17 +843,15 @@ function renderVideoGrid() {
     const chainBtn = v.txHash ? `<a class="video-action-btn" href="${LIGHTSCAN_TX}${v.txHash}" target="_blank" onclick="event.stopPropagation()">🔗 Chain</a>` : '';
     const chunkedBadge = ''; // chunk count hidden from UI — not meaningful to regular viewers
     const hiddenBadge  = (isAdmin && anyHidden) ? `<span style="background:rgba(232,82,82,0.12);border:1px solid rgba(232,82,82,.3);color:var(--red);font-size:14px;padding:4px 10px;border-radius:8px;font-weight:700">🚫 Hidden</span>` : '';
-    const adminBtn = isAdmin ? (() => {
+    const modRow = isAdmin ? (() => {
       let b = '';
       if (tempHidden && !permHidden)
-        b += `<button class="video-action-btn" style="color:var(--green);border-color:rgba(82,201,127,0.4)" onclick="event.stopPropagation();unhideVideo(${v.videoId},'${cv}')">✅ Restore</button>`;
-      else if (!tempHidden)
+        b += `<button class="video-action-btn" style="color:var(--green);border-color:rgba(82,201,127,0.4)" onclick="event.stopPropagation();unhideVideo(${v.videoId},'${cv}')">↩️ Repost</button>`;
+      else if (!permHidden)
         b += `<button class="video-action-btn" style="color:var(--red);border-color:rgba(232,82,82,0.4)" onclick="event.stopPropagation();hideVideo(${v.videoId},'${cv}')">🗑️ Remove</button>`;
-      if (permHidden)
-        b += `<span class="video-action-btn" style="color:var(--muted);border-color:rgba(100,116,139,0.3);cursor:default" title="Permanently removed — cannot restore">🔒 Permanent</span>`;
       b += `<button class="video-action-btn" style="color:#f97316;border-color:rgba(249,115,22,0.4)" onclick="event.stopPropagation();permanentRemoveVideo(${v.videoId},'${cv}')">🔒 Perm Remove</button>`;
-      b += `<button class="video-action-btn" style="color:var(--red);border-color:rgba(232,82,82,0.4)" onclick="event.stopPropagation();banAndRemoveVideo(${v.videoId},'${cv}','${v.uploader}')">🚫 Ban + Remove</button>`;
-      return b;
+      b += `<button class="video-action-btn" style="color:var(--red);border-color:rgba(232,82,82,0.4)" onclick="event.stopPropagation();banAndRemoveVideo(${v.videoId},'${cv}','${v.uploader}')">🚫 Ban</button>`;
+      return `<div class="video-mod-actions">${b}</div>`;
     })() : '';
     const cardStyle = (isAdmin && anyHidden) ? ' style="border-color:rgba(232,82,82,0.4);opacity:0.7"' : '';
     const tags = parseTags(v.description);
@@ -857,7 +868,8 @@ function renderVideoGrid() {
           <span>${timeAgo}</span>
           ${chunkedBadge}${hiddenBadge}
         </div>
-        <div class="video-actions">${orcaMintBtn}${orcaLearnBtn}${shareBtn}${chainBtn}${editBtn}${setThumbBtn}${adminBtn}</div>
+        <div class="video-actions">${orcaMintBtn}${orcaLearnBtn}${shareBtn}${chainBtn}${editBtn}${setThumbBtn}</div>
+        ${modRow}
       </div>
     </div>`;
   }).join('');
@@ -936,7 +948,9 @@ function applyFilters() {
   const q = document.getElementById('search-input').value.toLowerCase().trim();
   const matched = allVideos.filter(rawV => {
     const v = applyLtOverride(rawV);
-    if (!isAdmin && isVideoHidden(v)) return false; // hidden from public
+    const vKey = (v.contractVersion || 'v2') + '-' + v.videoId;
+    if (permanentHidden.has(vKey) || permanentHidden.has(String(v.videoId))) return false; // perm-removed never on main feed
+    if (!isAdmin && isVideoHidden(v)) return false; // temp-hidden from public only
     const matchCat = currentCategory === 'all' || (v.category||'Other').split(',').map(s=>s.trim()).includes(currentCategory);
     let matchQ = true;
     if (q) {
@@ -1257,6 +1271,8 @@ function showChannel(addr) {
   q.value = addr;
   filteredVideos = videosForFeedDisplay(allVideos.filter(rawV => {
     const v = applyLtOverride(rawV);
+    const vKey = (v.contractVersion || 'v2') + '-' + v.videoId;
+    if (permanentHidden.has(vKey) || permanentHidden.has(String(v.videoId))) return false;
     return v.uploader.toLowerCase() === addr.toLowerCase() && (isAdmin || !isVideoHidden(v));
   }));
   const shortAddr = addr.slice(0,6) + '…' + addr.slice(-4);
