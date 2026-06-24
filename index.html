@@ -879,9 +879,14 @@ function normalizeTitle(title) {
 /** One card per unique video in feeds — same NASA clip re-uploaded gets different on-chain ids. */
 function displayDedupeKey(rawV) {
   const v = applyLtOverride(rawV);
-  const tags = parseTags(v.description);
-  if (tags.length >= 3) return 'tags:' + [...tags].sort().join(',');
   const nt = normalizeTitle(v.title);
+  // NASA Artemis public-domain clip — many on-chain ids, same tags/titles
+  if (/\bartemis\b/.test(nt) && (/\blunar\b/.test(nt) || /\bflyby\b/.test(nt) || /\bmoon\b/.test(nt) || /\bnasa\b/.test(nt)))
+    return 'cluster:artemis-lunar';
+  if (/\bnight\b/.test(nt) && /\bliving\b/.test(nt) && /\bdead\b/.test(nt))
+    return 'cluster:notld';
+  const tags = parseTags(v.description).map(t => t.toLowerCase().trim()).filter(Boolean);
+  if (tags.length >= 3) return 'tags:' + [...new Set(tags)].sort().join(',');
   if (nt.length >= 8) return 'title:' + nt;
   return 'id:' + (v.contractVersion || 'v2') + '-' + v.videoId;
 }
@@ -924,8 +929,23 @@ function applyFilters() {
     }
     return matchCat && matchQ;
   });
+  // Main feed always dedupes — admin still sees one Artemis, not 14 chain entries
   filteredVideos = dedupeForDisplay(matched);
   renderVideoGrid();
+}
+
+function refreshFeedAfterWalletChange() {
+  // Re-run filters when admin status changes (hidden videos + dedupe depend on isAdmin)
+  if (document.getElementById('feed-title').textContent.startsWith('🚫 Hidden')) {
+    if (isAdmin) showHiddenVideos();
+    else showFeed();
+  } else if (document.getElementById('feed-title').textContent.includes("'s Channel")) {
+    const q = document.getElementById('search-input').value.trim();
+    if (q.startsWith('0x')) showChannel(q);
+    else showFeed();
+  } else {
+    applyFilters();
+  }
 }
 
 function filterByTag(tag) {
@@ -1262,7 +1282,7 @@ async function connectViaWalletConnect() {
     if (CONTRACT_ADDRESS_V3 !== 'DEPLOY_V3_ADDRESS_HERE') writeContractV3 = new ethers.Contract(CONTRACT_ADDRESS_V3, CONTRACT_ABI, signer);
     isAdmin = ADMIN_WALLETS.includes(wallet.toLowerCase());
     updateWalletUI(true);
-    renderVideoGrid();
+    refreshFeedAfterWalletChange();
     showToast('Wallet connected!');
   } catch(e) {
     if (!e || e.message?.includes('User rejected') || e.message?.includes('rejected') || e.code === 4001) return;
@@ -1310,7 +1330,7 @@ async function connectWallet() {
     }
     isAdmin = ADMIN_WALLETS.includes(wallet.toLowerCase());
     updateWalletUI(true);
-    renderVideoGrid(); // re-render so admin buttons appear/disappear
+    refreshFeedAfterWalletChange();
     showToast('Wallet connected!');
   } catch (err) {
     showToast('Connection failed: ' + (err.message || err), true);
