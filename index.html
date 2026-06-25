@@ -296,6 +296,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <button class="cat-btn" data-cat="Animation" onclick="selectCategory('Animation',this)">✏️ Animation</button>
   <button class="cat-btn" data-cat="Thriller" onclick="selectCategory('Thriller',this)">🔪 Thriller</button>
   <button class="cat-btn" data-cat="Music" onclick="selectCategory('Music',this)">🎵 Music</button>
+  <button class="cat-btn" data-cat="Latin" onclick="selectCategory('Latin',this)">💃 Latin</button>
+  <button class="cat-btn" data-cat="Reggae" onclick="selectCategory('Reggae',this)">🌊 Reggae</button>
   <button class="cat-btn" data-cat="Comedy" onclick="selectCategory('Comedy',this)">😂 Comedy</button>
   <button class="cat-btn" data-cat="Gaming" onclick="selectCategory('Gaming',this)">🎮 Gaming</button>
   <button class="cat-btn" data-cat="Vlogging" onclick="selectCategory('Vlogging',this)">📹 Vlogging</button>
@@ -581,7 +583,7 @@ const ADMIN_WALLETS  = [
   '0x2b6b64cc13dd6d5acabcf3a5dd72b6ee8004de35', // Lightchain Node wallet
 ];
 const VIDEOS_PER_PAGE = 20;
-const LT_BUILD = '20260624c'; // bump to bust browser cache after deploy
+const LT_BUILD = '20260624d'; // bump to bust browser cache after deploy
 
 (function ltBuildCheck() {
   const k = 'lt_build_v';
@@ -1705,6 +1707,7 @@ const CATS = [
   {v:'Movies',e:'🎬'},{v:'Horror',e:'👻'},{v:'Drama',e:'🎭'},
   {v:'Action',e:'💥'},{v:'Sci-Fi',e:'🚀'},{v:'Documentary',e:'🎥'},
   {v:'Animation',e:'✏️'},{v:'Thriller',e:'🔪'},{v:'Music',e:'🎵'},
+  {v:'Latin',e:'💃'},{v:'Reggae',e:'🌊'},
   {v:'Comedy',e:'😂'},{v:'Gaming',e:'🎮'},{v:'Vlogging',e:'📹'},
   {v:'Sports',e:'⚽'},{v:'News',e:'📰'},{v:'Education',e:'🎓'},
   {v:'Art',e:'🎨'},{v:'Family',e:'👨‍👩‍👧'},{v:'Tutorial',e:'🛠️'},{v:'Historical',e:'🏛️'},{v:'Other',e:'📎'}
