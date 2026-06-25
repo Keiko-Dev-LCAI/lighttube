@@ -53,8 +53,29 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
 /* ── MAIN FEED ── */
 #feed-section{padding:40px 44px}
-#feed-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px}
+#feed-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px}
 #feed-title{font-size:34px;font-weight:700}
+#feed-subtitle{display:none;font-size:16px;color:var(--muted);margin-top:6px;line-height:1.6;max-width:760px}
+#feed-subtitle strong{color:var(--gold)}
+.upload-help-box{margin:18px 0;padding:16px 18px;background:rgba(232,184,75,0.08);border:1px solid rgba(232,184,75,0.28);border-radius:12px;font-size:15px;color:var(--muted);line-height:1.65}
+.upload-help-box strong{color:var(--text)}
+.upload-help-box ol{margin:10px 0 0 18px;padding:0}
+.upload-help-box li{margin-bottom:6px}
+.video-id-badge{display:inline-block;font-size:13px;font-weight:700;padding:4px 10px;border-radius:8px;background:rgba(232,184,75,0.12);border:1px solid rgba(232,184,75,0.35);color:var(--gold);cursor:pointer;margin-bottom:8px}
+.video-id-badge:hover{background:rgba(232,184,75,0.22)}
+.player-id-box{margin:12px 0 16px;padding:14px 16px;background:rgba(232,184,75,0.08);border:1px solid rgba(232,184,75,0.3);border-radius:12px;font-size:15px;line-height:1.6;color:var(--text)}
+.player-id-box .id-line{font-size:20px;font-weight:800;color:var(--gold);margin-bottom:6px}
+#cp-result{display:none;max-width:620px;font-size:17px;line-height:1.65;color:var(--muted);padding:14px 18px;background:var(--bg3);border:1px solid var(--border);border-radius:12px}
+#cp-result.success{color:var(--green);border-color:rgba(82,201,127,0.35);background:rgba(82,201,127,0.08)}
+#cp-success-actions{display:none;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+.upload-id-hero{font-size:42px;font-weight:900;color:var(--gold);letter-spacing:0.02em;margin:8px 0 4px}
+.upload-id-sub{font-size:15px;color:var(--muted)}
+#video-id-help-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:550;overflow-y:auto;padding:20px}
+#video-id-help-inner{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:100%;max-width:640px;margin:auto;padding:28px 32px}
+.video-id-step{display:flex;gap:14px;margin-bottom:16px;align-items:flex-start}
+.video-id-step-num{flex-shrink:0;width:32px;height:32px;border-radius:50%;background:rgba(232,184,75,0.15);border:1px solid rgba(232,184,75,0.4);color:var(--gold);font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center}
+.video-id-step-body{flex:1;font-size:16px;line-height:1.6;color:var(--muted)}
+.video-id-step-body strong{color:var(--text)}
 #video-count{font-size:20px;color:var(--muted)}
 #video-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:22px}
 
@@ -275,6 +296,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   </div>
   <div class="nav-right">
     <button class="btn btn-outline btn-sm mobile-search-btn" onclick="toggleMobileSearch()" style="display:none">🔍</button>
+    <button class="btn btn-outline btn-sm" id="btn-video-id-help" onclick="openVideoIdHelp()" title="Where to find your Video ID">🔢 Video ID</button>
     <button class="btn btn-outline btn-sm" id="btn-connect" onclick="connectWallet()">🔗 Connect</button>
     <button class="btn btn-gold btn-sm" id="btn-upload" onclick="openUpload()" style="display:none">+ Upload</button>
     <button class="btn btn-outline btn-sm" id="btn-channel" onclick="showMyChannel()" style="display:none">My Channel</button>
@@ -330,8 +352,13 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <!-- ── MAIN FEED ── -->
 <div id="feed-section">
   <div id="feed-header">
-    <span id="feed-title">All Videos</span>
-    <span id="video-count"></span>
+    <div>
+      <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap">
+        <span id="feed-title">All Videos</span>
+        <span id="video-count"></span>
+      </div>
+      <div id="feed-subtitle"></div>
+    </div>
   </div>
   <div id="feed-loading">⛓️ Loading videos from Lightchain…</div>
   <div id="pagination-top"></div>
@@ -423,6 +450,16 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       </label>
     </div>
 
+    <div class="upload-help-box">
+      <strong>📋 Save your Video ID after upload</strong>
+      <ol>
+        <li>When upload finishes, you'll see <strong>v3-XX</strong> — copy it and your <strong>share link</strong>.</li>
+        <li>Later: <strong>My Channel</strong> → your video shows <strong>ID v3-XX</strong>, or open the video and see it under the title.</li>
+        <li>From a share link like <code>?video=19&amp;cv=v3</code>, the ID is <strong>19</strong> (the number only).</li>
+        <li>If playback freezes: keep the <strong>original file</strong>, note your Video ID number, and ask for a repair in <a href="https://discord.gg/lightchain" target="_blank" rel="noopener" style="color:var(--gold)">Lightchain Discord</a> with both.</li>
+      </ol>
+    </div>
+
     <div style="display:flex;gap:12px;margin-top:8px">
       <button class="btn btn-outline" onclick="closeUpload()" style="flex:1">Cancel</button>
       <button class="btn btn-gold" onclick="doUpload()" style="flex:2" id="upload-submit-btn">🚀 Upload to Blockchain</button>
@@ -439,8 +476,32 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <div style="font-size:18px;color:var(--text);min-height:28px" id="cp-status">Preparing upload…</div>
   <div class="cp-bar-track"><div id="cp-bar"></div></div>
   <div style="font-size:18px;font-weight:700;color:var(--muted)" id="cp-pct">0%</div>
-  <div class="cp-warning">⚠️ Don't close or refresh this tab — upload in progress</div>
-  <div style="font-size:16px;color:var(--muted);max-width:600px;line-height:1.65">The relay is handling everything on our server — no more wallet prompts. You're free to open other tabs and browse while it uploads. Just don't close or refresh this one.</div>
+  <div id="cp-result"></div>
+  <div class="cp-warning" id="cp-warning">⚠️ Don't close or refresh this tab — upload in progress</div>
+  <div style="font-size:16px;color:var(--muted);max-width:600px;line-height:1.65" id="cp-hint">The relay is handling everything on our server — no more wallet prompts. You're free to open other tabs and browse while it uploads. Just don't close or refresh this one.</div>
+  <div id="cp-success-actions">
+    <button class="btn btn-gold" onclick="openUploadedVideo()">▶ Watch my video</button>
+    <button class="btn btn-outline" onclick="copyUploadedShareLink()">📤 Copy share link</button>
+    <button class="btn btn-outline" onclick="copyUploadedVideoId()">🔢 Copy Video ID</button>
+    <button class="btn btn-outline" onclick="dismissUploadOverlay()">Done</button>
+  </div>
+</div>
+
+<!-- ── VIDEO ID HELP (all users) ── -->
+<div id="video-id-help-modal" onclick="if(event.target===this)closeVideoIdHelp()">
+  <div id="video-id-help-inner">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div style="font-size:24px;font-weight:800">🔢 Your Video ID — where to find it</div>
+      <button onclick="closeVideoIdHelp()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">✕</button>
+    </div>
+    <p style="font-size:16px;color:var(--muted);line-height:1.65;margin-bottom:20px">Every upload gets a permanent on-chain ID like <strong style="color:var(--gold)">v3-19</strong>. Save it — you need the <strong style="color:var(--text)">number only</strong> (e.g. <strong>19</strong>) if a video ever needs repair.</p>
+    <div class="video-id-step"><div class="video-id-step-num">1</div><div class="video-id-step-body"><strong>Right after upload</strong> — the success screen shows <strong style="color:var(--gold)">v3-XX</strong> in large text. Tap <strong>Copy Video ID</strong> or <strong>Copy share link</strong> before closing.</div></div>
+    <div class="video-id-step"><div class="video-id-step-num">2</div><div class="video-id-step-body"><strong>My Channel</strong> (nav, wallet connected) — each of your videos has a gold <strong style="color:var(--gold)">ID v3-XX</strong> badge. Tap it to copy the number.</div></div>
+    <div class="video-id-step"><div class="video-id-step-num">3</div><div class="video-id-step-body"><strong>Open your video</strong> — a gold box under the title shows your ID with copy buttons.</div></div>
+    <div class="video-id-step"><div class="video-id-step-num">4</div><div class="video-id-step-body"><strong>From a share link</strong> — <code style="color:var(--gold)">?video=19&amp;cv=v3</code> means your ID is <strong>19</strong> (the number in the URL).</div></div>
+    <div class="video-id-step"><div class="video-id-step-num">5</div><div class="video-id-step-body"><strong>If playback freezes</strong> — keep your <strong>original video file</strong>, copy your ID number, and post both in <a href="https://discord.gg/lightchain" target="_blank" rel="noopener" style="color:var(--gold)">Lightchain Discord</a> to request a repair.</div></div>
+    <button class="btn btn-gold" onclick="closeVideoIdHelp()" style="width:100%;margin-top:8px">Got it</button>
+  </div>
 </div>
 
 <!-- ── EDIT VIDEO MODAL ── -->
@@ -635,6 +696,24 @@ let _currentPlayerVideo = null; // {videoId, contractVersion, title} — source 
 let hiddenVideos     = new Set(); // videoIds hidden by admin (server-side)
 let permanentHidden  = new Set(); // subset that are permanently removed (cannot be restored)
 let ltOverrides   = {};        // relay metadata overrides {videoId: {title,description,category}}
+let _uploadVideoId    = null;
+let _uploadVideoCv    = 'v3';
+let _uploadVideoTitle = '';
+
+function setFeedSubtitle(html) {
+  const el = document.getElementById('feed-subtitle');
+  if (!el) return;
+  if (html) { el.innerHTML = html; el.style.display = 'block'; }
+  else { el.innerHTML = ''; el.style.display = 'none'; }
+}
+
+function openVideoIdHelp() {
+  document.getElementById('video-id-help-modal').style.display = 'block';
+}
+
+function closeVideoIdHelp() {
+  document.getElementById('video-id-help-modal').style.display = 'none';
+}
 
 // Central hidden-video check. Handles both formats: "v3-5" and bare "5".
 function isVideoHidden(v) {
@@ -858,10 +937,14 @@ function renderVideoGrid() {
     const cardStyle = (isAdmin && anyHidden) ? ' style="border-color:rgba(232,82,82,0.4);opacity:0.7"' : '';
     const tags = parseTags(v.description);
     const tagsHtml = tags.length ? `<div class="video-tags">${tags.map(t => `<span class="video-tag" onclick="event.stopPropagation();filterByTag('${t.replace(/'/g,"\\'")}')"><span style="opacity:0.7">#</span>${escHtml(t)}</span>`).join('')}</div>` : '';
+    const idBadge = isOwner
+      ? `<span class="video-id-badge" onclick="event.stopPropagation();copyVideoId(${v.videoId},'${cv}',this)" title="Tap to copy — needed if you request a repair">ID ${cv}-${v.videoId}</span>`
+      : '';
 
     return `<div class="video-card"${cardStyle} onclick="playVideo(${v.videoId},'${v.contractVersion||'v2'}')">
       <div class="video-thumb">${thumbHtml}${durBadge}</div>
       <div class="video-card-body">
+        ${idBadge}
         <span class="video-category">${catEmoji} ${escHtml(v.category || 'Other')}</span>
         <div class="video-title">${escHtml(v.title)}</div>
         ${tagsHtml}
@@ -1096,12 +1179,27 @@ async function playVideo(videoId, contractVersion) {
   document.getElementById('player-loading').style.display = 'none';
 
   const shortAddr = v.uploader.slice(0,6) + '…' + v.uploader.slice(-4);
-  const chainIdBadge = `<span style="color:var(--gold);font-weight:700;font-size:14px" title="Use this ID for repair">${cv}-${v.videoId}</span>`;
+  const isOwner = wallet && v.uploader.toLowerCase() === wallet.toLowerCase();
+  const chainIdBadge = `<span style="color:var(--gold);font-weight:700;font-size:15px" title="On-chain Video ID">${cv}-${v.videoId}</span>`;
+  let ownerIdBox = '';
+  if (isOwner) {
+    ownerIdBox = `<div class="player-id-box" id="player-id-box">
+      <div class="id-line">Video ID: ${cv}-${v.videoId}</div>
+      <div style="color:var(--muted);font-size:14px">Save this number. If playback freezes, keep your original file and ask for a repair in <a href="https://discord.gg/lightchain" target="_blank" rel="noopener" style="color:var(--gold)">Lightchain Discord</a> with <strong>ID ${v.videoId}</strong> (the number after v3-).</div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-gold btn-sm" onclick="copyVideoId(${v.videoId},'${cv}',this)">🔢 Copy Video ID</button>
+        <button class="btn btn-outline btn-sm" onclick="copyVideoLink(${v.videoId},'${cv}',this)">📤 Copy share link</button>
+      </div>
+    </div>`;
+  }
+  const existingIdBox = document.getElementById('player-id-box');
+  if (existingIdBox) existingIdBox.remove();
   document.getElementById('player-meta').innerHTML =
     `${chainIdBadge}
      <span class="video-category" style="font-size:13px">${getCatEmoji(v.category)} ${escHtml(v.category||'Other')}</span>
      <span>Uploaded by <a class="video-uploader" href="${LIGHTSCAN_ADDR}${v.uploader}" target="_blank">${shortAddr}</a></span>
      <span>${formatTimeAgo(v.timestamp)}</span>`;
+  if (ownerIdBox) document.getElementById('player-meta').insertAdjacentHTML('afterend', ownerIdBox);
 
   const mintBtn    = ``;
   const learnBtn   = '';
@@ -1224,6 +1322,8 @@ function closePlayer() {
   _streamPollToken++;
   hideStreamProgressBar();
   document.getElementById('player-modal').classList.remove('open');
+  const idBox = document.getElementById('player-id-box');
+  if (idBox) idBox.remove();
   const wrap = document.getElementById('player-video-wrap');
   wrap.querySelectorAll('video').forEach(v => { v.pause(); v.src = ''; });
   wrap.querySelectorAll('video,img,.player-prep-thumb').forEach(e => e.remove());
@@ -1278,7 +1378,13 @@ function showChannel(addr) {
     return v.uploader.toLowerCase() === addr.toLowerCase() && (isAdmin || !isVideoHidden(v));
   }));
   const shortAddr = addr.slice(0,6) + '…' + addr.slice(-4);
-  document.getElementById('feed-title').textContent = `📺 ${shortAddr}'s Channel`;
+  const isOwnChannel = wallet && addr.toLowerCase() === wallet.toLowerCase();
+  document.getElementById('feed-title').textContent = isOwnChannel ? '📺 My Channel' : `📺 ${shortAddr}'s Channel`;
+  if (isOwnChannel) {
+    setFeedSubtitle('Each video shows a gold <strong>ID v3-XX</strong> badge — tap to copy. Open any video for more. Need help? Tap <strong>Video ID</strong> in the nav. <button type="button" onclick="openVideoIdHelp()" style="background:none;border:none;padding:0;color:var(--gold);font:inherit;font-weight:700;cursor:pointer;text-decoration:underline">See full guide</button>');
+  } else {
+    setFeedSubtitle('');
+  }
   renderVideoGrid();
 }
 
@@ -1288,6 +1394,7 @@ function showFeed() {
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
   document.querySelector('[data-cat="all"]')?.classList.add('active');
   document.getElementById('feed-title').textContent = 'All Videos';
+  setFeedSubtitle('');
   applyFilters();
 }
 
@@ -1405,6 +1512,81 @@ function updateWalletUI(connected) {
   if (connected) {
     document.getElementById('btn-disconnect').textContent = wallet.slice(0,6) + '…' + wallet.slice(-4);
   }
+}
+
+// ════════════════════════════════════════════════════════
+//  UPLOAD SUCCESS / VIDEO ID
+// ════════════════════════════════════════════════════════
+function resetUploadOverlayUI() {
+  document.getElementById('cp-result').style.display = 'none';
+  document.getElementById('cp-result').className = '';
+  document.getElementById('cp-result').textContent = '';
+  document.getElementById('cp-success-actions').style.display = 'none';
+  document.getElementById('cp-warning').style.display = '';
+  document.getElementById('cp-hint').style.display = '';
+}
+
+function showUploadSuccess(videoId, cv, title) {
+  _uploadVideoId    = videoId;
+  _uploadVideoCv    = cv || 'v3';
+  _uploadVideoTitle = title || '';
+  document.getElementById('cp-status').textContent = '✅ Upload complete!';
+  document.getElementById('cp-status').style.color = 'var(--green)';
+  document.getElementById('cp-bar').style.width = '100%';
+  document.getElementById('cp-pct').textContent = '100%';
+  const resultEl = document.getElementById('cp-result');
+  resultEl.className = 'success';
+  resultEl.innerHTML =
+    `<div class="upload-id-hero">${escHtml(cv)}-${videoId}</div>` +
+    `<div class="upload-id-sub">Repair uses the number <strong>${videoId}</strong> only · Keep your original video file</div><br>` +
+    `Find this ID anytime: <strong>My Channel</strong> (gold badge on each video), open the video, or your share link. ` +
+    `<button type="button" onclick="openVideoIdHelp()" style="background:none;border:none;padding:0;color:var(--gold);font:inherit;font-weight:700;cursor:pointer;text-decoration:underline">Full guide</button>`;
+  resultEl.style.display = 'block';
+  document.getElementById('cp-warning').style.display = 'none';
+  document.getElementById('cp-hint').style.display = 'none';
+  document.getElementById('cp-success-actions').style.display = 'flex';
+  document.getElementById('chunk-progress-overlay').style.display = 'flex';
+}
+
+function dismissUploadOverlay() {
+  document.getElementById('chunk-progress-overlay').style.display = 'none';
+  resetUploadOverlayUI();
+  document.getElementById('cp-status').style.color = '';
+}
+
+function openUploadedVideo() {
+  if (_uploadVideoId == null) return;
+  dismissUploadOverlay();
+  playVideo(_uploadVideoId, _uploadVideoCv);
+}
+
+function copyUploadedShareLink() {
+  if (_uploadVideoId == null) return;
+  copyVideoLink(_uploadVideoId, _uploadVideoCv, { textContent: '📤 Copy share link',
+    innerHTML: undefined,
+    _restore: '📤 Copy share link' });
+  showToast('Share link copied — bookmark it to find your Video ID later');
+}
+
+function copyUploadedVideoId() {
+  if (_uploadVideoId == null) return;
+  const text = String(_uploadVideoId);
+  navigator.clipboard.writeText(text).then(() => {
+    showToast(`Video ID ${text} copied — use this number for repair`);
+  }).catch(() => showToast(text));
+}
+
+function copyVideoId(videoId, contractVersion, btn) {
+  const cv = contractVersion || 'v3';
+  const text = String(videoId);
+  navigator.clipboard.writeText(text).then(() => {
+    showToast(`Video ID ${text} copied (${cv}-${text} on site)`);
+    if (btn && btn.textContent !== undefined) {
+      const orig = btn.textContent;
+      btn.textContent = '✅ Copied!';
+      setTimeout(() => { btn.textContent = orig; }, 2000);
+    }
+  }).catch(() => showToast('ID: ' + text));
 }
 
 // ════════════════════════════════════════════════════════
@@ -1529,11 +1711,14 @@ async function doUpload() {
   closeUpload();
 
   const overlay = document.getElementById('chunk-progress-overlay');
+  resetUploadOverlayUI();
   overlay.style.display = 'flex';
   document.getElementById('cp-filename').textContent = title;
   document.getElementById('cp-status').textContent = 'Sign once to authorize upload…';
+  document.getElementById('cp-status').style.color = '';
   document.getElementById('cp-bar').style.width = '0%';
   document.getElementById('cp-pct').textContent = '0%';
+  _uploadVideoId = null;
 
   try {
     // ── Step 1: one signature (no gas, proves it's really you) ────────
@@ -1606,7 +1791,7 @@ async function doUpload() {
     document.getElementById('cp-pct').textContent = '60%';
 
     // ── Step 3: poll for blockchain progress (60–100%) ────────────────
-    await new Promise((resolve, reject) => {
+    const completedJob = await new Promise((resolve, reject) => {
       const poll = setInterval(async () => {
         try {
           const res = await fetch(`${RELAY_SERVER}/api/lighttube/upload-progress/${jobId}`);
@@ -1638,8 +1823,15 @@ async function doUpload() {
       }, 3000);
     });
 
-    overlay.style.display = 'none';
-    showToast('Video uploaded to the blockchain! 🎉');
+    const videoId = completedJob.videoId;
+    const cv = 'v3';
+    if (videoId == null) {
+      overlay.style.display = 'none';
+      showToast('Upload finished — refresh My Channel to find your Video ID', false);
+    } else {
+      showUploadSuccess(videoId, cv, title);
+      showToast(`Uploaded! Video ID: ${cv}-${videoId} — save your share link`, false);
+    }
     await loadAllVideos();
   } catch (err) {
     overlay.style.display = 'none';
