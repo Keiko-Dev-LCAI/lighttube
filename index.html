@@ -459,7 +459,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
         <li>When upload finishes, you'll see <strong>v3-XX</strong> — copy it and your <strong>share link</strong>.</li>
         <li>Later: <strong>My Channel</strong> → your video shows <strong>ID v3-XX</strong>, or open the video and see it under the title.</li>
         <li>From a share link like <code>?video=19&amp;cv=v3</code>, the ID is <strong>19</strong> (the number only).</li>
-        <li>If playback fails: connect wallet → open your video → <strong>Fix Missing Chunks</strong> → pick the <strong>same original file</strong>. Stuck? <a href="#" onclick="contactDeveloper();return false" style="color:var(--gold)">Contact Developer via OrcaMail</a>.</li>
+        <li>If playback fails: connect wallet → open your video → <strong>Fix Now</strong> → pick the <strong>same original file</strong>. ID is automatic. Stuck? <a href="#" onclick="contactDeveloper();return false" style="color:var(--gold)">Contact Developer via OrcaMail</a>.</li>
       </ol>
     </div>
 
@@ -502,7 +502,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <div class="video-id-step"><div class="video-id-step-num">2</div><div class="video-id-step-body"><strong>My Channel</strong> (nav, wallet connected) — each of your videos has a gold <strong style="color:var(--gold)">ID v3-XX</strong> badge. Tap it to copy the number.</div></div>
     <div class="video-id-step"><div class="video-id-step-num">3</div><div class="video-id-step-body"><strong>Open your video</strong> — a gold box under the title shows your ID with copy buttons.</div></div>
     <div class="video-id-step"><div class="video-id-step-num">4</div><div class="video-id-step-body"><strong>From a share link</strong> — <code style="color:var(--gold)">?video=19&amp;cv=v3</code> means your ID is <strong>19</strong> (the number in the URL).</div></div>
-    <div class="video-id-step"><div class="video-id-step-num">5</div><div class="video-id-step-body"><strong>If playback fails</strong> — connect wallet, open your video, tap <strong>Fix Missing Chunks</strong>, and upload the <strong>same original file</strong>. The app finds missing pieces and uploads only those. Need help? <a href="#" onclick="contactDeveloper();return false" style="color:var(--gold)">Contact Developer via OrcaMail</a>.</div></div>
+    <div class="video-id-step"><div class="video-id-step-num">5</div><div class="video-id-step-body"><strong>If playback fails</strong> — connect wallet, open your video, tap <strong>Fix Now</strong>, pick the <strong>same original file</strong>. Your Video ID is filled in automatically — you never type it. Need help? <a href="#" onclick="contactDeveloper();return false" style="color:var(--gold)">Contact Developer via OrcaMail</a>.</div></div>
     <button class="btn btn-gold" onclick="closeVideoIdHelp()" style="width:100%;margin-top:8px">Got it</button>
   </div>
 </div>
@@ -573,7 +573,12 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <p style="color:var(--muted);font-size:16px;line-height:1.65;margin-bottom:24px" id="repair-modal-desc">
       Pick the <strong>same original video file</strong> you uploaded. The relay scans the blockchain and uploads only the missing chunks. Keep this tab open until it finishes.
     </p>
-    <div class="form-group" style="margin-bottom:18px">
+    <div id="repair-video-badge" style="display:none;margin-bottom:18px;padding:14px 16px;background:rgba(232,184,75,0.1);border:1px solid rgba(232,184,75,0.35);border-radius:12px">
+      <div style="font-size:14px;color:var(--muted);margin-bottom:4px">Fixing your video</div>
+      <div style="font-size:20px;font-weight:800;color:var(--gold)" id="repair-video-badge-title"></div>
+      <div style="font-size:14px;color:var(--muted);margin-top:6px">ID is filled in automatically — you don't type anything.</div>
+    </div>
+    <div class="form-group" style="margin-bottom:18px" id="repair-id-group">
       <label class="form-label">On-chain video ID <span style="color:var(--muted);font-weight:400">(v3 integer — King Kong is <strong>19</strong>, not 18)</span></label>
       <input class="form-input" id="repair-video-id" type="number" min="1" placeholder="e.g. 19">
       <div id="repair-video-hint" style="font-size:14px;color:var(--gold);margin-top:8px;min-height:18px"></div>
@@ -743,10 +748,9 @@ function showPlayerRepairBanner(videoId, contractVersion, isOwner) {
   const idLine = `${cv}-${videoId}`;
   let body, actions;
   if (isOwner) {
-    body = `Some video pieces never made it on-chain, so playback can't finish. You can fix this yourself — upload the <strong>same original file</strong> and we'll add only the missing pieces. Your Video ID is <strong style="color:var(--gold)">${videoId}</strong>.`;
-    actions = `<button class="btn btn-gold btn-sm" onclick="openUserRepairPanel(${videoId},'${cv}')">🔧 Fix Missing Chunks</button>
-      <button class="btn btn-outline btn-sm" onclick="copyVideoId(${videoId},'${cv}',this)">🔢 Copy Video ID</button>
-      <button class="btn btn-outline btn-sm" onclick="contactDeveloper()">✉️ Contact Developer</button>`;
+    body = `Some pieces didn't finish uploading to the blockchain. <strong>You can fix this in two taps</strong> — we'll handle the ID automatically. Just pick the <strong>same original file</strong> you uploaded. Safe: we only add missing pieces.`;
+    actions = `<button class="btn btn-gold btn-sm" onclick="openUserRepairPanel(${videoId},'${cv}')">🔧 Fix Now — Pick Same File</button>
+      <button class="btn btn-outline btn-sm" onclick="contactDeveloper()">✉️ Need Help?</button>`;
   } else if (wallet) {
     body = `This video has missing on-chain pieces and can't play fully. Only the uploader can fix it — share this Video ID with them: <strong style="color:var(--gold)">${idLine}</strong>.`;
     actions = `<button class="btn btn-outline btn-sm" onclick="copyVideoId(${videoId},'${cv}',this)">🔢 Copy Video ID</button>
@@ -1238,9 +1242,9 @@ async function playVideo(videoId, contractVersion) {
   if (isOwner) {
     ownerIdBox = `<div class="player-id-box" id="player-id-box">
       <div class="id-line">Video ID: ${cv}-${v.videoId}</div>
-      <div style="color:var(--muted);font-size:14px">If playback fails later, tap <strong>Fix Missing Chunks</strong> and upload the same original file. Video ID for repair: <strong>${v.videoId}</strong>.</div>
+      <div style="color:var(--muted);font-size:14px">If playback fails later, tap <strong>Fix Now</strong> and pick the same original file — your ID is filled in automatically.</div>
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-gold btn-sm" onclick="openUserRepairPanel(${v.videoId},'${cv}')">🔧 Fix Missing Chunks</button>
+        <button class="btn btn-gold btn-sm" onclick="openUserRepairPanel(${v.videoId},'${cv}')">🔧 Fix Now</button>
         <button class="btn btn-outline btn-sm" onclick="copyVideoId(${v.videoId},'${cv}',this)">🔢 Copy Video ID</button>
         <button class="btn btn-outline btn-sm" onclick="copyVideoLink(${v.videoId},'${cv}',this)">📤 Copy share link</button>
       </div>
@@ -1603,7 +1607,7 @@ function showUploadSuccess(videoId, cv, title) {
   resultEl.className = 'success';
   resultEl.innerHTML =
     `<div class="upload-id-hero">${escHtml(cv)}-${videoId}</div>` +
-    `<div class="upload-id-sub">Keep your original video file · If playback ever fails, use <strong>Fix Missing Chunks</strong></div><br>` +
+    `<div class="upload-id-sub">Keep your original video file · If playback ever fails, tap <strong>Fix Now</strong> on your video (ID is automatic)</div><br>` +
     `Find this ID anytime: <strong>My Channel</strong> (gold badge on each video), open the video, or your share link. ` +
     `<button type="button" onclick="openVideoIdHelp()" style="background:none;border:none;padding:0;color:var(--gold);font:inherit;font-weight:700;cursor:pointer;text-decoration:underline">Full guide</button>`;
   resultEl.style.display = 'block';
@@ -2401,6 +2405,9 @@ async function fetchWithRetry(url, opts = {}, retries = 6) {
 let _repairFile = null;
 let _repairPollInterval = null;
 let _repairUserMode = false;
+let _repairTargetId = null;
+let _repairTargetCv = 'v3';
+let _repairTargetTitle = '';
 
 function openUserRepairPanel(videoId, contractVersion) {
   if (!wallet || !provider) { connectWallet(); return; }
@@ -2426,13 +2433,31 @@ function openRepairPanel(videoId, contractVersion, userMode) {
     cv  = _currentPlayerVideo.contractVersion || 'v3';
   }
 
+  _repairTargetId = vid;
+  _repairTargetCv = cv;
+  const title = (vid != null && _currentPlayerVideo && _currentPlayerVideo.videoId === vid)
+    ? _currentPlayerVideo.title
+    : (vid != null ? allVideos.find(x => x.videoId === vid && (x.contractVersion || 'v2') === cv)?.title : '') || '';
+  _repairTargetTitle = title;
+
   document.getElementById('repair-video-id').value = vid != null ? String(vid) : '';
   const hintEl = document.getElementById('repair-video-hint');
-  if (vid != null) {
-    const title = (_currentPlayerVideo && _currentPlayerVideo.videoId === vid) ? _currentPlayerVideo.title : '';
-    hintEl.textContent = `Target: ${cv}-${vid}${title ? ' — ' + title : ''}`;
-  } else {
+  const idGroup = document.getElementById('repair-id-group');
+  const badge   = document.getElementById('repair-video-badge');
+  if (_repairUserMode && vid != null) {
+    idGroup.style.display = 'none';
+    badge.style.display = 'block';
+    document.getElementById('repair-video-badge-title').textContent =
+      title ? `${title} (${cv}-${vid})` : `${cv}-${vid}`;
     hintEl.textContent = '';
+  } else {
+    idGroup.style.display = '';
+    badge.style.display = 'none';
+    if (vid != null) {
+      hintEl.textContent = `Target: ${cv}-${vid}${title ? ' — ' + title : ''}`;
+    } else {
+      hintEl.textContent = '';
+    }
   }
 
   document.getElementById('repair-drop-text').textContent = 'Click to pick the original video file';
@@ -2441,15 +2466,20 @@ function openRepairPanel(videoId, contractVersion, userMode) {
   document.getElementById('repair-run-btn').disabled = false;
   document.getElementById('repair-modal-title').textContent = _repairUserMode ? '🔧 Fix Missing Chunks' : '🔧 Repair Video (Admin)';
   document.getElementById('repair-modal-desc').innerHTML = _repairUserMode
-    ? 'Pick the <strong>same original video file</strong> you uploaded. The relay scans the blockchain and uploads only the missing chunks. Keep this tab open until it finishes.'
+    ? '<strong>Safe to try</strong> — we only add missing pieces; nothing gets deleted. Pick the <strong>same original file</strong> you uploaded, then tap the button below. Keep this tab open until it finishes.'
     : 'Admin repair: scans the blockchain and re-submits missing chunks. Pick the uploader\'s original file.';
-  document.getElementById('repair-force-btn').style.display = 'none';
+  document.getElementById('repair-run-btn').textContent = _repairUserMode ? '🔧 Start Fix' : '🔧 Upload Missing Chunks';
   document.getElementById('repair-modal').style.display = 'block';
+  if (_repairUserMode) {
+    setTimeout(() => document.getElementById('repair-file-input').click(), 350);
+  }
 }
 
 function closeRepairPanel() {
   document.getElementById('repair-modal').style.display = 'none';
   _repairUserMode = false;
+  _repairTargetId = null;
+  _repairTargetTitle = '';
 }
 
 function handleRepairFileSelect(input) {
@@ -2494,17 +2524,25 @@ async function runRepairVideo() {
     return;
   }
 
-  const videoIdVal = document.getElementById('repair-video-id').value.trim();
-  if (!videoIdVal || isNaN(parseInt(videoIdVal))) {
-    document.getElementById('repair-status-msg').textContent = '⚠️ Enter a valid video ID (integer)';
-    return;
+  let videoId;
+  if (userMode) {
+    if (_repairTargetId == null) {
+      document.getElementById('repair-status-msg').textContent = '⚠️ Open repair from your video first';
+      return;
+    }
+    videoId = _repairTargetId;
+  } else {
+    const videoIdVal = document.getElementById('repair-video-id').value.trim();
+    if (!videoIdVal || isNaN(parseInt(videoIdVal))) {
+      document.getElementById('repair-status-msg').textContent = '⚠️ Enter a valid video ID (integer)';
+      return;
+    }
+    videoId = parseInt(videoIdVal);
   }
   if (!_repairFile) {
     document.getElementById('repair-status-msg').textContent = '⚠️ Please pick the original video file';
     return;
   }
-
-  const videoId     = parseInt(videoIdVal);
   const file        = _repairFile;
   const btn         = document.getElementById('repair-run-btn');
   btn.disabled      = true;
@@ -2525,9 +2563,11 @@ async function runRepairVideo() {
 
   try {
     // ── Step 1: init chunked repair session ─────────────────────────────
-    const cv = (_currentPlayerVideo && _currentPlayerVideo.videoId === videoId)
-      ? (_currentPlayerVideo.contractVersion || 'v3')
-      : 'v3';
+    const cv = userMode
+      ? (_repairTargetCv || 'v3')
+      : ((_currentPlayerVideo && _currentPlayerVideo.videoId === videoId)
+        ? (_currentPlayerVideo.contractVersion || 'v3')
+        : 'v3');
     const initFd = new FormData();
     initFd.append('repairVideoId',   String(videoId));
     initFd.append('contractVersion', cv);
