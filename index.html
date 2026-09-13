@@ -11,6 +11,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <style>
 :root {
+  --on-accent: #0a0f1e;
   --bg:     #f8f7fc;
   --bg2:    #ffffff;
   --bg3:    #f0eef8;
@@ -104,17 +105,17 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .video-thumb-play{font-size:28px;opacity:0.6;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5));line-height:1;user-select:none}
 .video-thumb-img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;z-index:1}
 .video-card-body{padding:8px 10px}
-.video-avatar{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;font-size:10px;font-weight:800;color:white;flex-shrink:0;font-family:monospace;letter-spacing:0}
-.video-category{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;background:rgba(124,92,224,0.12);color:var(--purple);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}
+.video-avatar{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;font-size:12px;font-weight:800;color:white;flex-shrink:0;font-family:monospace;letter-spacing:0}
+.video-category{display:inline-block;font-size:12px;font-weight:700;padding:3px 8px;border-radius:6px;background:rgba(124,92,224,0.12);color:var(--purple);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}
 .cat-picker{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
 .cat-pill{background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:8px 16px;font-size:16px;cursor:pointer;transition:all .15s;color:var(--muted);font-family:inherit}
 .cat-pill:hover{border-color:var(--gold);color:var(--text)}
 .cat-pill.selected{background:rgba(155,127,232,0.18);border-color:var(--purple);color:var(--purple);font-weight:700}
 .video-tags{display:flex;gap:4px;flex-wrap:nowrap;overflow:hidden;margin-bottom:4px;max-height:22px}
-.video-tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px;background:rgba(61,127,196,0.1);color:var(--blue);cursor:pointer;border:1px solid rgba(61,127,196,0.2);transition:all .15s;white-space:nowrap}
+.video-tag{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:12px;background:rgba(61,127,196,0.1);color:var(--blue);cursor:pointer;border:1px solid rgba(61,127,196,0.2);transition:all .15s;white-space:nowrap}
 .video-tag:hover{background:rgba(61,127,196,0.2)}
 .video-title{font-size:14px;font-weight:700;margin-bottom:4px;color:var(--text);line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.video-meta{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.video-meta{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px}
 .video-uploader{color:var(--purple);font-weight:600;cursor:pointer}
 .video-uploader:hover{color:var(--gold)}
 .video-actions{display:flex;gap:10px;flex-wrap:wrap}
@@ -193,7 +194,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
 /* ── HERO (empty state) ── */
 #hero-section{background:linear-gradient(135deg,#0d0b18 0%,#1a0d2e 50%,#0d0b18 100%);border-bottom:1px solid var(--border);padding:70px 36px;text-align:center}
-.hero-title{font-size:52px;font-weight:900;margin-bottom:16px;background:linear-gradient(135deg,var(--gold),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero-title{color:var(--text);font-size:52px;font-weight:900;margin-bottom:16px;background-clip:text}
 .hero-sub{font-size:24px;color:var(--muted);margin-bottom:32px;line-height:1.6}
 .hero-badges{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:34px}
 .hero-badge{background:var(--bg3);border:1px solid var(--border);border-radius:22px;padding:9px 20px;font-size:18px;color:var(--muted)}
@@ -709,7 +710,25 @@ const LIGHTSCAN_TX      = 'https://mainnet.lightscan.app/tx/';
 const LIGHTSCAN_ADDR    = 'https://mainnet.lightscan.app/address/';
 const ORCAMINT_URL      = 'https://orcamint.xyz';
 const ORCALEARN_URL     = 'https://orcalearn.ai';
-const CHUNK_SIZE        = 1 * 1024 * 1024; // 1MB — ~24M gas, safe within Lightchain 50M block limit
+// Client estimate helper; relay on-chain slice is ~115KB (orcavault LT_CHUNK_SIZE).
+const CHUNK_SIZE        = 115000;
+// Browser → relay transport (bigger + parallel = faster movie uploads)
+const UPLOAD_PIECE_SIZE = 16 * 1024 * 1024; // 16 MB (was 5 MB)
+const UPLOAD_PARALLEL   = 4;                // concurrent piece uploads
+
+/** Run async work over 0..n-1 with limited concurrency. */
+async function mapPool(n, concurrency, fn) {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, n) }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= n) return;
+      await fn(i);
+    }
+  });
+  await Promise.all(workers);
+}
+
 
 // ── Admin / Moderation ──────────────────────────────────────────────────────
 const RELAY_SERVER        = 'https://orcavault-production.up.railway.app';
@@ -721,7 +740,7 @@ const ADMIN_WALLETS  = [
   '0x2b6b64cc13dd6d5acabcf3a5dd72b6ee8004de35', // Lightchain Node wallet
 ];
 const VIDEOS_PER_PAGE = 20;
-const LT_BUILD = '20260701b'; // bump to bust browser cache after deploy
+const LT_BUILD = '20260815a'; // bump to bust browser cache after deploy
 const FEED_TIP_SUBTITLE = '⛓️ On-chain forever · 🔧 Self-repair uploads · 💰 Tip creators in LCAI';
 
 (function ltBuildCheck() {
@@ -2082,10 +2101,11 @@ function processFile(file) {
   // we skip reading the file entirely and compute the estimate mathematically.
   {
     const mb   = (file.size / 1024 / 1024).toFixed(1);
-    const RELAY_CHUNK = 90_000;
+    const RELAY_CHUNK = 115000; // match relay on-chain CHUNK_SIZE
     const estimatedDataURILen = Math.ceil(file.size * 4 / 3) + 30;
     const chunks  = Math.ceil(estimatedDataURILen / RELAY_CHUNK);
-    const estMins = Math.ceil((chunks * 5) / 60);
+    // ~parallel batches of on-chain chunks; rough UX estimate
+    const estMins = Math.ceil((chunks * 2.5) / 60);
     const timeStr = estMins <= 1 ? 'under a minute' : `~${estMins} minutes`;
     document.getElementById('chunk-hint-box').innerHTML =
       `<div class="chunk-hint">✅ Ready — sign once, relay uploads in the background. No gas fees. You can open other browser tabs while it uploads — just don't close this one! (${mb} MB · ~${chunks} chunks · est. ${timeStr})</div>`;
@@ -2141,7 +2161,7 @@ async function doUpload() {
     document.getElementById('cp-status').textContent = 'Registering upload…';
 
     // ── Step 2A: init chunked upload session on relay server ──────────
-    const PIECE_SIZE  = 5 * 1024 * 1024; // 5 MB transport pieces (unrelated to on-chain CHUNK_SIZE)
+    const PIECE_SIZE  = UPLOAD_PIECE_SIZE;
     const totalPieces = Math.ceil(file.size / PIECE_SIZE);
 
     const initRes = await fetch(`${RELAY_SERVER}/api/lighttube/upload-init`, {
@@ -2155,6 +2175,8 @@ async function doUpload() {
         description: desc,
         category,
         totalPieces,
+        pieceSize:   PIECE_SIZE,
+        fileSize:    file.size,
         fileName:    file.name || 'video.mp4',
         thumbnail:   selectedThumbnail || null,
       }),
@@ -2168,8 +2190,9 @@ async function doUpload() {
     }
     const { jobId } = await initRes.json();
 
-    // ── Step 2B: send file in 5 MB pieces (0–60% progress bar) ───────
-    for (let i = 0; i < totalPieces; i++) {
+    // ── Step 2B: send file in large pieces, in parallel (0–60% bar) ───
+    let piecesDone = 0;
+    await mapPool(totalPieces, UPLOAD_PARALLEL, async (i) => {
       const start = i * PIECE_SIZE;
       const end   = Math.min(start + PIECE_SIZE, file.size);
       const piece = file.slice(start, end);
@@ -2177,6 +2200,7 @@ async function doUpload() {
       const fd = new FormData();
       fd.append('jobId',      jobId);
       fd.append('pieceIndex', String(i));
+      fd.append('totalPieces', String(totalPieces));
       fd.append('piece',      piece, 'piece');
 
       const pieceRes = await fetch(`${RELAY_SERVER}/api/lighttube/upload-piece`, {
@@ -2188,14 +2212,14 @@ async function doUpload() {
         throw new Error(err.error || `Upload piece ${i} failed`);
       }
 
-      // Progress 0–60% = sending file to relay
-      const pct = Math.round(((i + 1) / totalPieces) * 60);
+      piecesDone += 1;
+      const pct = Math.round((piecesDone / totalPieces) * 60);
       document.getElementById('cp-bar').style.width = pct + '%';
       document.getElementById('cp-pct').textContent = pct + '%';
-      const sentMB  = Math.round((i + 1) * PIECE_SIZE / 1024 / 1024);
+      const sentMB  = Math.min(Math.round(piecesDone * PIECE_SIZE / 1024 / 1024), Math.round(file.size / 1024 / 1024));
       const totalMB = Math.round(file.size / 1024 / 1024);
-      document.getElementById('cp-status').textContent = `Uploading ${sentMB} MB of ${totalMB} MB…`;
-    }
+      document.getElementById('cp-status').textContent = `Uploading ${sentMB} MB of ${totalMB} MB (${UPLOAD_PARALLEL}× parallel)…`;
+    });
 
     document.getElementById('cp-status').textContent = 'Processing on blockchain…';
     document.getElementById('cp-bar').style.width = '60%';
@@ -2888,7 +2912,7 @@ async function runRepairVideo() {
   const file        = _repairFile;
   const btn         = document.getElementById('repair-run-btn');
   btn.disabled      = true;
-  const PIECE_SIZE  = 5 * 1024 * 1024;
+  const PIECE_SIZE  = UPLOAD_PIECE_SIZE;
   const totalPieces = Math.ceil(file.size / PIECE_SIZE);
 
   // Show progress overlay right away
@@ -2914,6 +2938,7 @@ async function runRepairVideo() {
     initFd.append('repairVideoId',   String(videoId));
     initFd.append('contractVersion', cv);
     initFd.append('totalPieces',     String(totalPieces));
+    initFd.append('pieceSize',       String(PIECE_SIZE));
     initFd.append('fileName',        file.name || 'video.mp4');
     initFd.append('fileSize',        String(file.size));
     if (userMode) {
@@ -2945,14 +2970,15 @@ async function runRepairVideo() {
     const initData = await initRes.json();
     const { jobId, cached } = initData;
 
-    // ── Step 2: send file in 5 MB pieces (0–60% progress) ───────────────
+    // ── Step 2: large pieces in parallel (0–60% progress) ───────────────
     if (cached) {
       document.getElementById('repair-bar').style.width = '60%';
       document.getElementById('repair-pct').textContent = '60%';
       document.getElementById('repair-overlay-status').textContent =
         '⚡ File already on relay — skipping re-upload, scanning blockchain…';
     } else {
-      for (let i = 0; i < totalPieces; i++) {
+      let piecesDone = 0;
+      await mapPool(totalPieces, UPLOAD_PARALLEL, async (i) => {
         const piece = file.slice(i * PIECE_SIZE, (i + 1) * PIECE_SIZE);
         const pfd   = new FormData();
         pfd.append('jobId',       jobId);
@@ -2964,14 +2990,15 @@ async function runRepairVideo() {
           const err = await pieceRes.json().catch(() => ({}));
           throw new Error(err.error || `Piece ${i} failed`);
         }
-        const pct     = Math.round(((i + 1) / totalPieces) * 60);
-        const sentMB  = Math.round((i + 1) * PIECE_SIZE / 1024 / 1024);
+        piecesDone += 1;
+        const pct     = Math.round((piecesDone / totalPieces) * 60);
+        const sentMB  = Math.min(Math.round(piecesDone * PIECE_SIZE / 1024 / 1024), Math.round(file.size / 1024 / 1024));
         const totalMB = Math.round(file.size / 1024 / 1024);
         document.getElementById('repair-bar').style.width = pct + '%';
         document.getElementById('repair-pct').textContent = pct + '%';
         document.getElementById('repair-overlay-status').textContent =
-          `📤 Uploading file… ${sentMB} MB of ${totalMB} MB`;
-      }
+          `📤 Uploading file… ${sentMB} MB of ${totalMB} MB (${UPLOAD_PARALLEL}× parallel)`;
+      });
     }
 
     document.getElementById('repair-bar').style.width = '60%';
