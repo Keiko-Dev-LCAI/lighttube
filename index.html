@@ -58,6 +58,31 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .page-nav-btn{padding:10px 16px;border:none;background:transparent;color:var(--muted);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;border-bottom:2px solid transparent;transition:all .15s}
 .page-nav-btn:hover{color:var(--text)}
 .page-nav-btn.active{color:var(--gold);border-bottom-color:var(--gold)}
+.page-nav-btn.shuffle-nav{color:var(--gold)}
+
+/* ── SHUFFLE / FOR YOU FEED ── */
+#shuffle-feed{display:none;position:fixed;inset:0;background:#000;z-index:700;flex-direction:column;color:#fff;overflow:hidden}
+#shuffle-feed.open{display:flex}
+#sf-video-wrap{flex:1;position:relative;min-height:0;background:#000}
+#sf-video-wrap video{width:100%;height:100%;object-fit:contain;background:#000;display:block}
+#sf-poster{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.45;z-index:1;pointer-events:none}
+#sf-shimmer{display:none;position:absolute;inset:0;z-index:3;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:linear-gradient(110deg,#111 8%,#1c1c24 18%,#111 33%);background-size:200% 100%;animation:sf-shimmer 1.4s linear infinite}
+#sf-shimmer.show{display:flex}
+@keyframes sf-shimmer{to{background-position:-200% 0}}
+.sf-spin{width:36px;height:36px;border:3px solid rgba(255,255,255,.2);border-top-color:var(--gold);border-radius:50%;animation:sf-rot .8s linear infinite}
+@keyframes sf-rot{to{transform:rotate(360deg)}}
+#sf-overlay{position:absolute;inset:0;z-index:4;pointer-events:none;display:flex;flex-direction:column;justify-content:flex-end;padding:16px 16px 28px;background:linear-gradient(transparent 40%,rgba(0,0,0,.72) 100%)}
+#sf-overlay *{pointer-events:auto}
+#sf-topbar{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:linear-gradient(rgba(0,0,0,.55),transparent)}
+#sf-close,#sf-mute,#sf-prev,#sf-next{background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.2);color:#fff;width:44px;height:44px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+#sf-prev,#sf-next{position:absolute;z-index:5;top:50%;transform:translateY(-50%)}
+#sf-prev{left:10px}#sf-next{right:10px}
+#sf-title{font-size:18px;font-weight:800;margin-bottom:6px;text-shadow:0 1px 8px #000}
+#sf-meta{font-size:13px;color:rgba(255,255,255,.8);display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+#sf-actions{display:flex;gap:8px;flex-wrap:wrap}
+#sf-actions .btn{pointer-events:auto;font-size:13px;padding:7px 12px}
+#sf-unmute-hint{display:none;position:absolute;z-index:6;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.7);border:1px solid rgba(255,255,255,.25);color:#fff;padding:12px 18px;border-radius:24px;font-weight:800;cursor:pointer;font-size:16px}
+#sf-unmute-hint.show{display:block}
 
 /* ── MAIN FEED ── */
 #feed-section{padding:8px 16px;flex:1;display:flex;flex-direction:column;min-height:0}
@@ -397,6 +422,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <!-- ── PAGE NAV ── -->
 <div id="page-nav">
   <button class="page-nav-btn active" data-view="feed" onclick="showFeed()">All Videos</button>
+  <button class="page-nav-btn shuffle-nav" type="button" onclick="openShuffleFeed()">🔀 Shuffle</button>
   <button class="page-nav-btn" data-view="explore" onclick="showExplore()">Explore</button>
   <button class="page-nav-btn" data-view="trending" onclick="showTrending()">Trending</button>
 </div>
@@ -445,6 +471,28 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
 <!-- ── TRENDING ── -->
 <div id="trending-section"></div>
+
+<!-- ── SHUFFLE / FOR YOU FEED (grid stays; this is an added mode) ── -->
+<div id="shuffle-feed" aria-hidden="true">
+  <div id="sf-topbar">
+    <button type="button" id="sf-close" onclick="closeShuffleFeed()" title="Close">✕</button>
+    <div style="font-weight:800;font-size:15px;letter-spacing:.04em">🔀 Shuffle</div>
+    <button type="button" id="sf-mute" onclick="toggleShuffleMute()" title="Sound">🔇</button>
+  </div>
+  <button type="button" id="sf-prev" onclick="shufflePrev()" aria-label="Previous">▲</button>
+  <button type="button" id="sf-next" onclick="shuffleNext()" aria-label="Next">▼</button>
+  <div id="sf-video-wrap">
+    <img id="sf-poster" alt="">
+    <div id="sf-shimmer"><div class="sf-spin"></div><div style="font-size:13px;opacity:.8">Preparing stream…</div></div>
+    <video id="sf-video" playsinline webkit-playsinline loop muted></video>
+    <button type="button" id="sf-unmute-hint" onclick="toggleShuffleMute()">🔊 Tap for sound</button>
+    <div id="sf-overlay">
+      <div id="sf-title"></div>
+      <div id="sf-meta"></div>
+      <div id="sf-actions"></div>
+    </div>
+  </div>
+</div>
 
 <!-- ── VIDEO PLAYER MODAL ── -->
 <div id="player-modal">
@@ -740,7 +788,7 @@ const ADMIN_WALLETS  = [
   '0x2b6b64cc13dd6d5acabcf3a5dd72b6ee8004de35', // Lightchain Node wallet
 ];
 const VIDEOS_PER_PAGE = 20;
-const LT_BUILD = '20260815a'; // bump to bust browser cache after deploy
+const LT_BUILD = '20260920a'; // bump to bust browser cache after deploy
 const FEED_TIP_SUBTITLE = '⛓️ On-chain forever · 🔧 Self-repair uploads · 💰 Tip creators in LCAI';
 
 (function ltBuildCheck() {
@@ -1360,6 +1408,241 @@ function prewarmVisibleChunkedVideos() {
     if (v.isChunked) prewarmChunkedStream(v.contractVersion, v.videoId);
   });
 }
+
+// ════════════════════════════════════════════════════════
+//  SHUFFLE FEED (TikTok-style). Grid is unchanged.
+//  Zero-buffering isn't guaranteed on a huge never-played clip's first view;
+//  we pre-warm the next 2–3 so the common swipe feels instant.
+// ════════════════════════════════════════════════════════
+let _sfQueue = [];
+let _sfIdx = 0;
+let _sfBroken = new Set();
+let _sfMuted = true;
+let _sfOpen = false;
+let _sfToken = 0;
+let _sfTouchY = null;
+let _sfTouchT = 0;
+let _sfWheelAt = 0;
+
+function _sfKey(v) { return (v.contractVersion || 'v2') + '-' + v.videoId; }
+
+function _sfDurSec(v) {
+  const d = parseDuration(v.description);
+  if (!d) return 9999;
+  const p = d.split(':').map(Number);
+  if (p.length === 2) return p[0] * 60 + p[1];
+  if (p.length === 3) return p[0] * 3600 + p[1] * 60 + p[2];
+  return 9999;
+}
+
+function _sfShuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function buildShuffleQueue() {
+  const pool = allVideos.filter(v => !isVideoHidden(v) && !_sfBroken.has(_sfKey(v)));
+  const warm = [];
+  const rest = [];
+  pool.forEach(v => {
+    const key = _sfKey(v);
+    const short = _sfDurSec(v) <= 90 || (v.totalChunks && v.totalChunks <= 50);
+    if (chunkCache.has(key) || short) warm.push(v);
+    else rest.push(v);
+  });
+  return _sfShuffle(warm).concat(_sfShuffle(rest));
+}
+
+function openShuffleFeed() {
+  if (!allVideos.length) { showToast('Videos still loading…', true); return; }
+  _sfQueue = buildShuffleQueue();
+  if (!_sfQueue.length) { showToast('No playable videos right now', true); return; }
+  _sfIdx = 0;
+  _sfOpen = true;
+  const el = document.getElementById('shuffle-feed');
+  el.classList.add('open');
+  el.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  _sfBindGestures(true);
+  showShuffleAt(_sfIdx);
+}
+
+function closeShuffleFeed() {
+  _sfOpen = false;
+  _sfToken++;
+  const el = document.getElementById('shuffle-feed');
+  el.classList.remove('open');
+  el.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+  const vid = document.getElementById('sf-video');
+  vid.pause();
+  vid.removeAttribute('src');
+  vid.load();
+  _sfBindGestures(false);
+}
+
+function _sfBindGestures(on) {
+  const wrap = document.getElementById('sf-video-wrap');
+  if (on) {
+    wrap.addEventListener('touchstart', _sfTouchStart, { passive: true });
+    wrap.addEventListener('touchend', _sfTouchEnd, { passive: true });
+    window.addEventListener('wheel', _sfWheel, { passive: false });
+    window.addEventListener('keydown', _sfKeys);
+  } else {
+    wrap.removeEventListener('touchstart', _sfTouchStart);
+    wrap.removeEventListener('touchend', _sfTouchEnd);
+    window.removeEventListener('wheel', _sfWheel);
+    window.removeEventListener('keydown', _sfKeys);
+  }
+}
+
+function _sfTouchStart(e) {
+  if (!e.changedTouches || !e.changedTouches[0]) return;
+  _sfTouchY = e.changedTouches[0].clientY;
+  _sfTouchT = Date.now();
+}
+function _sfTouchEnd(e) {
+  if (_sfTouchY == null || !e.changedTouches || !e.changedTouches[0]) return;
+  const dy = e.changedTouches[0].clientY - _sfTouchY;
+  const dt = Date.now() - _sfTouchT;
+  _sfTouchY = null;
+  if (Math.abs(dy) < 50 || dt > 800) return;
+  if (dy < 0) shuffleNext();
+  else shufflePrev();
+}
+function _sfWheel(e) {
+  if (!_sfOpen) return;
+  e.preventDefault();
+  const now = Date.now();
+  if (now - _sfWheelAt < 550) return;
+  if (e.deltaY > 40) { _sfWheelAt = now; shuffleNext(); }
+  else if (e.deltaY < -40) { _sfWheelAt = now; shufflePrev(); }
+}
+function _sfKeys(e) {
+  if (!_sfOpen) return;
+  if (e.key === 'Escape') { closeShuffleFeed(); return; }
+  if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') shufflePrev();
+  if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); shuffleNext(); }
+  if (e.key === 'm' || e.key === 'M') toggleShuffleMute();
+}
+
+function shuffleNext() {
+  if (!_sfQueue.length) return;
+  _sfIdx = (_sfIdx + 1) % _sfQueue.length;
+  if (_sfIdx === 0) _sfQueue = buildShuffleQueue();
+  showShuffleAt(_sfIdx);
+}
+function shufflePrev() {
+  if (!_sfQueue.length) return;
+  _sfIdx = (_sfIdx - 1 + _sfQueue.length) % _sfQueue.length;
+  showShuffleAt(_sfIdx);
+}
+
+function toggleShuffleMute() {
+  _sfMuted = !_sfMuted;
+  const vid = document.getElementById('sf-video');
+  vid.muted = _sfMuted;
+  document.getElementById('sf-mute').textContent = _sfMuted ? '🔇' : '🔊';
+  document.getElementById('sf-unmute-hint').classList.toggle('show', _sfMuted);
+  if (!_sfMuted) vid.play().catch(() => {});
+}
+
+function _sfPrewarmAhead() {
+  for (let i = 1; i <= 3; i++) {
+    const v = _sfQueue[(_sfIdx + i) % _sfQueue.length];
+    if (!v) continue;
+    if (v.isChunked) prewarmChunkedStream(v.contractVersion || 'v2', v.videoId);
+  }
+}
+
+async function showShuffleAt(idx) {
+  const token = ++_sfToken;
+  const raw = _sfQueue[idx];
+  if (!raw) return;
+  const v = applyLtOverride(raw);
+  const cv = v.contractVersion || 'v2';
+  const key = _sfKey(v);
+  const shortAddr = v.uploader.slice(0, 6) + '…' + v.uploader.slice(-4);
+  const thumbSrc = `${GITHUB_THUMB}${cv}_${v.videoId}.jpg`;
+
+  document.getElementById('sf-title').textContent = v.title || 'Untitled';
+  document.getElementById('sf-meta').innerHTML =
+    `<span>${getCatEmoji(v.category)} ${escHtml(v.category || 'Other')}</span>` +
+    `<span>${escHtml(shortAddr)}</span>` +
+    `<span>${cv}-${v.videoId}</span>`;
+  const shareBtn = `<button class="btn btn-outline btn-sm" onclick="copyVideoLink(${v.videoId},'${cv}',this)">📤 Share</button>`;
+  const chainBtn = v.txHash ? `<a class="btn btn-outline btn-sm" href="${LIGHTSCAN_TX}${v.txHash}" target="_blank">🔗 Chain</a>` : '';
+  const contactBtn = parseContact(v.description)
+    ? `<button class="btn btn-outline btn-sm" onclick="contactCreator('${v.uploader}')">✉️ Message</button>` : '';
+  document.getElementById('sf-actions').innerHTML = shareBtn + chainBtn + contactBtn;
+
+  const poster = document.getElementById('sf-poster');
+  poster.src = thumbSrc;
+  poster.onerror = () => { poster.removeAttribute('src'); };
+  const videoEl = document.getElementById('sf-video');
+  videoEl.pause();
+  videoEl.removeAttribute('src');
+  videoEl.load();
+  videoEl.muted = _sfMuted;
+  videoEl.loop = true;
+  videoEl.playsInline = true;
+  document.getElementById('sf-mute').textContent = _sfMuted ? '🔇' : '🔊';
+  document.getElementById('sf-unmute-hint').classList.toggle('show', _sfMuted);
+  const shimmer = document.getElementById('sf-shimmer');
+  shimmer.classList.add('show');
+
+  _sfPrewarmAhead();
+
+  const playSrc = async (src) => {
+    if (token !== _sfToken) return;
+    videoEl.src = src;
+    videoEl.muted = _sfMuted;
+    try { await videoEl.play(); } catch (e) { videoEl.muted = true; _sfMuted = true; await videoEl.play().catch(() => {}); }
+    if (token !== _sfToken) return;
+    shimmer.classList.remove('show');
+  };
+
+  try {
+    if (!v.isChunked && v.dataURI) {
+      await playSrc(v.dataURI);
+      return;
+    }
+    const streamUrl = `${RELAY_SERVER}/api/media/stream/lighttube/${cv}/${v.videoId}`;
+    const statusUrl = `${streamUrl}/status`;
+    if (chunkCache.has(key)) {
+      await playSrc(chunkCache.get(key));
+      return;
+    }
+    prewarmChunkedStream(cv, v.videoId);
+    const result = await waitForChunkedStream(statusUrl, v.totalChunks || 0, () => {});
+    if (token !== _sfToken) return;
+    if (result.status === 'error') throw new Error(result.error || 'unplayable');
+    chunkCache.set(key, streamUrl);
+    await playSrc(streamUrl);
+  } catch (err) {
+    if (token !== _sfToken) return;
+    _sfBroken.add(key);
+    _sfQueue = _sfQueue.filter(x => _sfKey(x) !== key);
+    if (!_sfQueue.length) {
+      shimmer.classList.remove('show');
+      showToast('No playable videos in shuffle', true);
+      closeShuffleFeed();
+      return;
+    }
+    if (_sfIdx >= _sfQueue.length) _sfIdx = 0;
+    showShuffleAt(_sfIdx);
+  }
+}
+
+document.getElementById('sf-video')?.addEventListener('click', (e) => {
+  if (!_sfOpen) return;
+  if (e.target && e.target.closest('#sf-actions,#sf-overlay a,#sf-overlay button')) return;
+  toggleShuffleMute();
+});
 
 async function waitForChunkedStream(statusUrl, totalChunks, onProgress) {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
