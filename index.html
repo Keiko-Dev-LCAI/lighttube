@@ -2140,25 +2140,27 @@ async function doUpload() {
 
   const file = selectedFile;
   closeUpload();
+  _uploadVideoId = null;
 
   const overlay = document.getElementById('chunk-progress-overlay');
   resetUploadOverlayUI();
-  overlay.style.display = 'flex';
-  document.getElementById('cp-filename').textContent = title;
-  document.getElementById('cp-status').textContent = 'Sign once to authorize upload…';
-  document.getElementById('cp-status').style.color = '';
-  document.getElementById('cp-bar').style.width = '0%';
-  document.getElementById('cp-pct').textContent = '0%';
-  _uploadVideoId = null;
 
   try {
-    // ── Step 1: one signature (no gas, proves it's really you) ────────
+    // ── Step 1: sign FIRST (do not cover the wallet sheet with the overlay) ──
+    showToast('Waiting for wallet signature…', false);
     const timestamp = Date.now().toString();
     const message   = `Upload to LightTube\nTitle: ${title}\nWallet: ${wallet.toLowerCase()}\nTimestamp: ${timestamp}`;
     const signer    = await provider.getSigner();
     const signature = await signer.signMessage(message);
 
+    overlay.style.display = 'flex';
+    document.getElementById('cp-filename').textContent = title;
     document.getElementById('cp-status').textContent = 'Registering upload…';
+    document.getElementById('cp-status').style.color = '';
+    document.getElementById('cp-bar').style.width = '0%';
+    document.getElementById('cp-pct').textContent = '0%';
+    document.getElementById('cp-hint').textContent =
+      'The relay is handling everything on our server — no more wallet prompts. You\'re free to open other tabs and browse while it uploads. Just don\'t close or refresh this one.';
 
     // ── Step 2A: init chunked upload session on relay server ──────────
     const PIECE_SIZE  = UPLOAD_PIECE_SIZE;
