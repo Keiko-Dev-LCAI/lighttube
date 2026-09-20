@@ -788,7 +788,7 @@ const ADMIN_WALLETS  = [
   '0x2b6b64cc13dd6d5acabcf3a5dd72b6ee8004de35', // Lightchain Node wallet
 ];
 const VIDEOS_PER_PAGE = 20;
-const LT_BUILD = '20260920a'; // bump to bust browser cache after deploy
+const LT_BUILD = '20260920b'; // bump to bust browser cache after deploy
 const FEED_TIP_SUBTITLE = '⛓️ On-chain forever · 🔧 Self-repair uploads · 💰 Tip creators in LCAI';
 
 (function ltBuildCheck() {
@@ -1581,6 +1581,7 @@ async function showShuffleAt(idx) {
   document.getElementById('sf-actions').innerHTML = shareBtn + chainBtn + contactBtn;
 
   const poster = document.getElementById('sf-poster');
+  poster.style.display = '';
   poster.src = thumbSrc;
   poster.onerror = () => { poster.removeAttribute('src'); };
   const videoEl = document.getElementById('sf-video');
@@ -1642,6 +1643,10 @@ document.getElementById('sf-video')?.addEventListener('click', (e) => {
   if (!_sfOpen) return;
   if (e.target && e.target.closest('#sf-actions,#sf-overlay a,#sf-overlay button')) return;
   toggleShuffleMute();
+});
+document.getElementById('sf-video')?.addEventListener('playing', () => {
+  const p = document.getElementById('sf-poster');
+  if (p) p.style.display = 'none';
 });
 
 async function waitForChunkedStream(statusUrl, totalChunks, onProgress) {
