@@ -2203,10 +2203,23 @@ async function doUpload() {
       fd.append('totalPieces', String(totalPieces));
       fd.append('piece',      piece, 'piece');
 
-      const pieceRes = await fetch(`${RELAY_SERVER}/api/lighttube/upload-piece`, {
-        method: 'POST',
-        body:   fd,
-      });
+      const pieceCtl = new AbortController();
+      const pieceTimer = setTimeout(() => pieceCtl.abort(), 180000);
+      let pieceRes;
+      try {
+        pieceRes = await fetch(`${RELAY_SERVER}/api/lighttube/upload-piece`, {
+          method: 'POST',
+          body:   fd,
+          signal: pieceCtl.signal,
+        });
+      } catch (pe) {
+        if (pe && pe.name === 'AbortError') {
+          throw new Error('Upload piece timed out — the relay did not accept the file in 3 minutes. Try a shorter clip or retry.');
+        }
+        throw pe;
+      } finally {
+        clearTimeout(pieceTimer);
+      }
       if (!pieceRes.ok) {
         const err = await pieceRes.json().catch(() => ({}));
         throw new Error(err.error || `Upload piece ${i} failed`);
