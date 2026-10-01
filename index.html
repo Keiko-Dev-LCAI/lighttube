@@ -435,7 +435,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <span class="hero-badge">⛓️ Stored on Lightchain</span>
     <span class="hero-badge">🔒 Uncensorable</span>
     <span class="hero-badge">👁️ Free to watch</span>
-    <span class="hero-badge">💰 Free to upload</span>
+    <span class="hero-badge">💰 $0.50 to upload</span>
   </div>
   <div class="hero-cta">
     <button class="btn btn-gold" onclick="connectWallet()">🔗 Connect Wallet to Upload</button>
@@ -580,12 +580,18 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       </ol>
     </div>
 
+    <div style="padding:12px 16px;background:var(--bg3);border-radius:10px;border:1px solid var(--border);margin-top:4px">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:4px">Upload fee</div>
+      <div id="upload-fee-display" style="font-size:16px;font-weight:700;color:var(--gold)">Loading…</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.45">Paid in native LCAI at the live price when you upload. Non-refundable. On-chain uploads cannot be deleted — only hidden from this app.</div>
+    </div>
+
     <div style="display:flex;gap:12px;margin-top:8px">
       <button class="btn btn-outline" onclick="closeUpload()" style="flex:1">Cancel</button>
       <button class="btn btn-gold" onclick="doUpload()" style="flex:2" id="upload-submit-btn">🚀 Upload to Blockchain</button>
     </div>
 
-    <p style="font-size:13px;color:var(--muted);text-align:center;margin-top:14px;line-height:1.5">Gas costs ~$0.000001 per transaction on Lightchain · Your wallet address is your channel · No account needed</p>
+    <p style="font-size:13px;color:var(--muted);text-align:center;margin-top:14px;line-height:1.5">You'll send ~$0.50 in LCAI, then sign once to authorize upload · Your wallet address is your channel · No account needed</p>
   </div>
 </div>
 
@@ -788,7 +794,7 @@ const ADMIN_WALLETS  = [
   '0x2b6b64cc13dd6d5acabcf3a5dd72b6ee8004de35', // Lightchain Node wallet
 ];
 const VIDEOS_PER_PAGE = 20;
-const LT_BUILD = '20260920b'; // bump to bust browser cache after deploy
+const LT_BUILD = '20261001fee'; // bump to bust browser cache after deploy
 const FEED_TIP_SUBTITLE = '⛓️ On-chain forever · 🔧 Self-repair uploads · 💰 Tip creators in LCAI';
 
 (function ltBuildCheck() {
@@ -2310,10 +2316,31 @@ function copyVideoId(videoId, contractVersion, btn) {
 // ════════════════════════════════════════════════════════
 //  UPLOAD
 // ════════════════════════════════════════════════════════
+async function fetchLtubeFee() {
+  const res = await fetch(`${RELAY_SERVER}/api/lighttube/fee`);
+  if (!res.ok) throw new Error('Fee service unavailable');
+  const data = await res.json();
+  if (typeof data.fee_lcai !== 'number') throw new Error('Fee not configured on server');
+  if (data.fee_lcai > 0 && !data.fee_wallet) throw new Error('Fee not configured on server');
+  return data;
+}
+
 function openUpload() {
   if (!wallet) { connectWallet(); return; }
   buildCatPicker('upload-cat-picker', 'upload-category');
+  const feeEl = document.getElementById('upload-fee-display');
+  if (feeEl) feeEl.textContent = 'Loading…';
   document.getElementById('upload-modal').classList.add('open');
+  fetchLtubeFee().then(data => {
+    window._ltubeFeeData = data;
+    if (feeEl) feeEl.textContent =
+      (data.fee_lcai === 0)
+        ? 'No LCAI upload fee right now — you only sign once.'
+        : `$${data.fee_usd.toFixed(2)} · ~${data.fee_lcai.toFixed(2)} LCAI at current price`;
+  }).catch(() => {
+    window._ltubeFeeData = null;
+    if (feeEl) feeEl.textContent = 'Unable to load fee — check connection and retry';
+  });
 }
 
 function closeUpload() {
@@ -2427,18 +2454,38 @@ async function doUpload() {
   if (!category) { showToast('Select a category', true); return; }
 
   const file = selectedFile;
+  let feeData = window._ltubeFeeData;
   closeUpload();
   _uploadVideoId = null;
 
   const overlay = document.getElementById('chunk-progress-overlay');
   resetUploadOverlayUI();
+  let paymentTxHash = null;
 
   try {
-    // ── Step 1: sign FIRST (do not cover the wallet sheet with the overlay) ──
+    // ── Step 0: pay $0.50 LCAI fee first (wallet sheet not covered by overlay) ──
+    if (!feeData || typeof feeData.fee_lcai !== 'number') {
+      showToast('Loading upload fee…', false);
+      feeData = await fetchLtubeFee();
+      window._ltubeFeeData = feeData;
+    }
+    const signer = await provider.getSigner();
+    if (feeData.fee_lcai > 0) {
+      showToast(`Approve ~${feeData.fee_lcai.toFixed(2)} LCAI fee in your wallet…`, false);
+      const feeWei = ethers.parseEther(String(Math.ceil(feeData.fee_lcai * 1.01 * 1000) / 1000)); // 1% buffer
+      const feeTx  = await signer.sendTransaction({
+        to:    feeData.fee_wallet,
+        value: feeWei,
+      });
+      showToast('Waiting for fee confirmation on chain…', false);
+      await feeTx.wait(1);
+      paymentTxHash = feeTx.hash;
+    }
+
+    // ── Step 1: sign (do not cover the wallet sheet with the overlay) ──
     showToast('Waiting for wallet signature…', false);
     const timestamp = Date.now().toString();
     const message   = `Upload to LightTube\nTitle: ${title}\nWallet: ${wallet.toLowerCase()}\nTimestamp: ${timestamp}`;
-    const signer    = await provider.getSigner();
     const signature = await signer.signMessage(message);
 
     overlay.style.display = 'flex';
@@ -2469,6 +2516,7 @@ async function doUpload() {
         fileSize:    file.size,
         fileName:    file.name || 'video.mp4',
         thumbnail:   selectedThumbnail || null,
+        paymentTxHash: paymentTxHash || '',
       }),
     });
     if (!initRes.ok) {
@@ -2574,7 +2622,10 @@ async function doUpload() {
   } catch (err) {
     overlay.style.display = 'none';
     const msg = err.reason || err.message || String(err) || 'Unknown error';
-    showToast('Upload failed: ' + msg, true);
+    const extra = paymentTxHash
+      ? ` Fee tx ${paymentTxHash} — if the relay never started you may retry without paying twice.`
+      : '';
+    showToast('Upload failed: ' + msg + extra, true);
   }
 }
 
@@ -3400,7 +3451,7 @@ async function runRepairVideo() {
 }
 </script>
 <footer style="background:var(--bg2);border-top:1px solid var(--border);padding:18px 44px;text-align:center;font-size:15px;color:var(--muted);line-height:1.65;margin-top:40px">
-  Free to watch · Free to upload · Content that violates community standards will be hidden from this app. Note: all uploads are permanently recorded on the Lightchain blockchain and cannot be erased from the chain — only removed from this interface.
+  Free to watch · $0.50 to upload (LCAI, live price) · The upload fee is non-refundable. Content that violates community standards will be hidden from this app. Note: all uploads are permanently recorded on the Lightchain blockchain and cannot be erased from the chain — only removed from this interface.
   <div style="margin-top:10px"><a href="https://orcamail.ai" target="_blank" style="color:#9b7fe8;text-decoration:none;font-size:14px;opacity:0.8">📢 Advertise with us</a></div>
 </footer>
 <!-- X HANDLE -->
